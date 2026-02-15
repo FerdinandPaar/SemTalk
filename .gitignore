@@ -5,6 +5,49 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 Thumbs.db
-*.bin
+
+# Python virtual envs
+venv/
+ENV/
+env/
+.venv/
+.env/
+
+# PyTorch / weights
 *.pt
 *.pth
+*.bin
+weights/
+
+# Large outputs / caches
+outputs/
+datasets/
+BEAT2/
+demo/
+facebook/
+audio_cache/
+
+# numpy / LMDB
+*.npz
+*.npy
+*.mdb
+lock
+
+# Logs
+*.log
+nohup.out
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Misc
+.DS_Store
+*.swp
+__pycache__/
+*.pyc
+nohup.out
+outputs/
+datasets/
+models/
+weights/

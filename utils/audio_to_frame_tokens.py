@@ -132,7 +132,7 @@ def get_word_sentence(
 @torch.no_grad()
 def get_emo(audio_path, frame):
     # 根据文件名提取情感标签
-    emo_model = AutoModel(model="iic/emotion2vec_plus_large")
+    emo_model = AutoModel(model="weights/emotion2vec_plus_large", disable_update=True)
     roundt = (frame - 4) // (64 - 4)
     round_l = 64 - 4
     sample_emo_pre_list = []
@@ -177,9 +177,9 @@ def get_hubert(audio_file, args):
     audio_each_file = librosa.resample(aud_ori, orig_sr=sr, target_sr=args.audio_sr)
     from transformers import Wav2Vec2Processor, HubertModel
     print("Loading the Wav2Vec2 Processor...")
-    wav2vec2_processor = Wav2Vec2Processor.from_pretrained("../facebook/hubert-large-ls960-ft")
+    wav2vec2_processor = Wav2Vec2Processor.from_pretrained("./facebook/hubert-large-ls960-ft")
     print("Loading the HuBERT Model...")
-    hubert_model = HubertModel.from_pretrained("../facebook/hubert-large-ls960-ft")
+    hubert_model = HubertModel.from_pretrained("./facebook/hubert-large-ls960-ft")
     hubert_model.eval()
     if args.audio_rep == "onset+amplitude":
         frame_length = 1024

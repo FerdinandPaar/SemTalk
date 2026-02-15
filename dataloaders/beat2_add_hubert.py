@@ -43,7 +43,7 @@ def safe_barrier():
     if _dist_initialized():
         dist.barrier()
 
-emo_model = AutoModel(model="iic/emotion2vec_plus_large")
+emo_model = AutoModel(model="weights/emotion2vec_plus_large", disable_update=True)
 # emo_model = emo_model.to("cuda:0")
 from itertools import groupby
 
