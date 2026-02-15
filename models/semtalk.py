@@ -853,9 +853,10 @@ class semtalk_sparse(nn.Module):
         self.audio_pre_encoder_body = MLP(3, args.hidden_size, 256)
         self.at_attn_bert = nn.Linear(args.audio_f*2, args.audio_f*2)
         self.gate = nn.Linear(256, 2)
-        ######## clip emtion #########
-        self.clip_embedding = nn.Linear(512, 256)
-        self.emotion_embedding = nn.Linear(512, 256)
+        ######## clip / moclip embedding #########
+        clip_dim = getattr(args, 'clip_dim', 512)  # 512 for ViT-B/32, 768 for ViT-L/14
+        self.clip_embedding = nn.Linear(clip_dim, 256)
+        self.emotion_embedding = nn.Linear(clip_dim, 256)
         self.at_attn_face_semantic = nn.Linear(512, 512)
         self.at_attn_body_semantic = nn.Linear(512, 512)
         
@@ -1115,5 +1116,6 @@ if __name__ == "__main__":
     print(out['rec_face'].shape)
 
     sparse_model = semtalk_sparse(args)
-    out_sparse = sparse_model(in_word=in_word, feat_clip_text=torch.randn(2, 512), emotion=torch.randn(2, 512), mask=mask, in_motion=in_motion, in_id=in_id, hubert=hubert)
+    clip_dim = getattr(args, 'clip_dim', 512)
+    out_sparse = sparse_model(in_word=in_word, feat_clip_text=torch.randn(2, clip_dim), emotion=torch.randn(2, clip_dim), mask=mask, in_motion=in_motion, in_id=in_id, hubert=hubert)
     print(out_sparse['rec_upper'].shape)

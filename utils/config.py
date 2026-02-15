@@ -63,6 +63,13 @@ def parse_args():
     parser.add("--notes", default="", type=str) 
     parser.add("--trainer", default="camn", type=str) 
 
+    # ------------- MoCLIP / TMR integration ---------------- #
+    parser.add("--semantic_encoder", default="clip", type=str, help="Text encoder: 'clip' (vanilla), 'moclip' (legacy), or 'tmr'")
+    parser.add("--moclip_ckpt", default=None, type=str, help="Path to TMR/MoCLIP text encoder checkpoint")
+    parser.add("--distilbert_path", default="distilbert-base-uncased", type=str, help="HF model name or local path for DistilBERT (TMR backbone)")
+    parser.add("--clip_version", default="ViT-B/32", type=str, help="CLIP backbone (ViT-B/32, ViT-L/14) -- only used when semantic_encoder=clip")
+    parser.add("--clip_dim", default=512, type=int, help="Text encoder output dim (256 for TMR, 512 for CLIP ViT-B/32)")
+
     parser.add("--l", default=4, type=int)
     # ------------- path and save name ---------------- #
     parser.add("--is_train", default=True, type=str2bool)

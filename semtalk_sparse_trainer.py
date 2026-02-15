@@ -25,6 +25,7 @@ from dataloaders.data_tools import joints_list
 import librosa
 import pickle
 import clip
+from src.utils.moclip_utils import load_tmr_text_encoder, load_moclip_text_encoder
 
 class CustomTrainer(train.BaseTrainer):
     def __init__(self, args):
@@ -821,7 +822,25 @@ class CustomTrainer(train.BaseTrainer):
         bs, j = 1, self.joints
         in_emo_sep = audio_to_frame_tokens.get_emo(audio_path, frames)
 
-        self.clip_model = self.load_and_freeze_clip(device=self.device)
+        # --- Load text encoder: TMR / MoCLIP / vanilla CLIP ---
+        semantic_encoder = getattr(self.args, 'semantic_encoder', 'clip')
+        moclip_ckpt = getattr(self.args, 'moclip_ckpt', None)
+        self._use_tmr = False
+        if semantic_encoder == 'tmr' and moclip_ckpt and os.path.isfile(moclip_ckpt):
+            distilbert_path = getattr(self.args, 'distilbert_path', 'distilbert-base-uncased')
+            print(f"[Inference] Loading TMR text encoder from {moclip_ckpt}")
+            self.tmr_encoder = load_tmr_text_encoder(
+                text_encoder_path=moclip_ckpt,
+                distilbert_path=distilbert_path,
+                device=str(self.device),
+            )
+            self._use_tmr = True
+        elif semantic_encoder == 'moclip' and moclip_ckpt and os.path.isfile(moclip_ckpt):
+            clip_version = getattr(self.args, 'clip_version', 'ViT-B/32')
+            print(f"[Inference] Loading MoCLIP text encoder from {moclip_ckpt}")
+            self.clip_model = load_moclip_text_encoder(moclip_ckpt, device=str(self.device), clip_version=clip_version)
+        else:
+            self.clip_model = self.load_and_freeze_clip(device=self.device)
         feat_clip_text_list = []
         emo_clip_text_list = []
         for i in range(len(in_sentence)):
@@ -1057,6 +1076,10 @@ class CustomTrainer(train.BaseTrainer):
         print("result saved to ", save_path)
     
     def encode_text(self, raw_text, device):
+        if getattr(self, '_use_tmr', False):
+            if isinstance(raw_text, str):
+                raw_text = [raw_text]
+            return self.tmr_encoder.encode(raw_text)  # [B, 256]
         text = clip.tokenize(raw_text, truncate=True).to(device)
         feat_clip_text = self.clip_model.encode_text(text).float()
         return feat_clip_text
