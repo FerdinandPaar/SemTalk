@@ -51,3 +51,10 @@ outputs/
 datasets/
 models/
 weights/
+__pycache__/
+*.pyc
+nohup.out
+outputs/
+datasets/
+models/
+weights/
