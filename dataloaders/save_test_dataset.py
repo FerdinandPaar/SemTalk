@@ -23,6 +23,7 @@ import clip
 from utils import other_tools
 from dataloaders.data_tools import joints_list
 from dataloaders.build_vocab import Vocab
+from src.utils.moclip_utils import load_tmr_text_encoder
 
 # -------------------------
 # Processor: plug your code
@@ -81,12 +82,33 @@ class Processor:
         for joint_name in self.tar_joint_list_lower:
             self.joint_mask_lower[self.ori_joint_list[joint_name][1] - self.ori_joint_list[joint_name][0]:self.ori_joint_list[joint_name][1]] = 1
 
-        self.clip_model = self.load_and_freeze_clip(device=device)
+        # --- Text encoder: TMR or vanilla CLIP ---
+        moclip_path = getattr(args, 'moclip_path', None)
+        self._use_tmr = False
+        if moclip_path and os.path.isfile(moclip_path):
+            distilbert_path = getattr(args, 'distilbert_path', 'distilbert-base-uncased')
+            print(f"[Processor] Loading TMR text encoder from {moclip_path}")
+            self.tmr_encoder = load_tmr_text_encoder(
+                text_encoder_path=moclip_path,
+                distilbert_path=distilbert_path,
+                device=str(device),
+            )
+            self._use_tmr = True
+        else:
+            if moclip_path:
+                print(f"[Processor] WARNING: --moclip_path '{moclip_path}' not found, falling back to vanilla CLIP.")
+            self.clip_model = self.load_and_freeze_clip(device=device)
+
         self.vq_model_face.eval()
         self.vq_model_upper.eval()
         self.vq_model_hands.eval()
         self.vq_model_lower.eval()
+
     def encode_text(self, raw_text, device):
+        if self._use_tmr:
+            if isinstance(raw_text, str):
+                raw_text = [raw_text]
+            return self.tmr_encoder.encode(raw_text)  # [B, 256]
         text = clip.tokenize(raw_text, truncate=True).to(device)
         feat_clip_text = self.clip_model.encode_text(text).float()
         return feat_clip_text
@@ -316,6 +338,8 @@ def main():
     ap.add_argument("--clean_first_seconds", default=0, type=int)
     ap.add_argument("--clean_final_seconds", default=0, type=int)
     ap.add_argument("--additional_data", default=False, type=bool)
+    ap.add_argument("--moclip_path", default=None, type=str, help="Path to TMR/MoCLIP text encoder checkpoint")
+    ap.add_argument("--distilbert_path", default="distilbert-base-uncased", type=str, help="HF model or local path for DistilBERT (TMR backbone)")
 
     # 改为 pkl 目标路径
     ap.add_argument("--dst_pkl", default="./datasets/beat2_semtalk_test.pkl" ,help="Destination pickle file")

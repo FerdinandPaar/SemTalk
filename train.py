@@ -26,11 +26,14 @@ from optimizers.optim_factory import create_optimizer
 from optimizers.scheduler_factory import create_scheduler
 from optimizers.loss_factory import get_loss_func
 # import os
-os.environ["HF_HOME"] = "/mnt/disk2T/hfcache"
-os.environ["HUGGINGFACE_HUB_CACHE"] = "/mnt/disk2T/hfcache/hub"
-os.environ["TRANSFORMERS_CACHE"] = "/mnt/disk2T/hfcache/transformers"
-os.environ["XDG_CACHE_HOME"] = "/mnt/disk2T/hfcache"
-os.environ["TMPDIR"] = "/mnt/disk2T/tmp"
+# Use /mnt/disk2T if available, else fall back to ~/.cache
+_hf_root = "/mnt/disk2T/hfcache" if os.path.isdir("/mnt/disk2T") else os.path.expanduser("~/.cache/huggingface")
+_tmp_root = "/mnt/disk2T/tmp" if os.path.isdir("/mnt/disk2T") else "/tmp"
+os.environ["HF_HOME"] = _hf_root
+os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(_hf_root, "hub")
+os.environ["TRANSFORMERS_CACHE"] = os.path.join(_hf_root, "transformers")
+os.environ["XDG_CACHE_HOME"] = _hf_root
+os.environ["TMPDIR"] = _tmp_root
 
 
 class BaseTrainer(object):

@@ -1,7 +1,7 @@
 is_train: True
 ddp: False
 gpus: [0]
-stat: ts 
+stat: wandb 
 pre_frames: 4
 root_path: ./
 out_path: ./outputs/
@@ -38,7 +38,7 @@ additional_data: False
 cache_path: datasets/beat2_cache_2
 dataset: semtalk_dataloader
 train_path: datasets/beat2_semtalk_train_moclip
-test_path: datasets/beat2_semtalk_test.pkl
+test_path: datasets/beat2_semtalk_test_moclip.pkl
 new_cache: False
 
 # motion config
