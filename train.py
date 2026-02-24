@@ -60,13 +60,12 @@ class BaseTrainer(object):
             self.train_data = __import__(f"dataloaders.{args.dataset}", fromlist=["something"]).LMDBNPZDataset(args, "train")
         
         self.train_loader = torch.utils.data.DataLoader(
-            self.train_data, 
-            batch_size=args.batch_size,  
-            shuffle=True if args.ddp else True,  
+            self.train_data,
+            batch_size=args.batch_size,
+            shuffle=False if args.ddp else True,   # DistributedSampler is mutually exclusive with shuffle
             num_workers=args.loader_workers,
             drop_last=True,
-
-            sampler=torch.utils.data.distributed.DistributedSampler(self.train_data) if args.ddp else None, 
+            sampler=torch.utils.data.distributed.DistributedSampler(self.train_data) if args.ddp else None,
         )
         self.train_length = len(self.train_loader)
         logger.info(f"Init train dataloader success")
@@ -88,10 +87,10 @@ class BaseTrainer(object):
 
         if args.ddp:
             self.model = getattr(model_module, args.g_name)(args).to(self.rank)
-            process_group = torch.distributed.new_group()
-            self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model, process_group)   
+            # SyncBatchNorm is NOT used: single-node A100s share NVLink; regular per-GPU
+            # BN is correct and avoids the cross-rank allgather in every forward pass.
             self.model = DDP(self.model, device_ids=[self.rank], output_device=self.rank,
-                             broadcast_buffers=False, find_unused_parameters=False)
+                             broadcast_buffers=False, find_unused_parameters=True)
         else: 
             self.model = torch.nn.DataParallel(getattr(model_module, args.g_name)(args), args.gpus).cuda()
         # mean_1024, std_1024 = _load_hubert_stats(self.args, self.device)
@@ -105,7 +104,6 @@ class BaseTrainer(object):
         if args.d_name is not None:
             if args.ddp:
                 self.d_model = getattr(model_module, args.d_name)(args).to(self.rank)
-                self.d_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.d_model, process_group)   
                 self.d_model = DDP(self.d_model, device_ids=[self.rank], output_device=self.rank, 
                                    broadcast_buffers=False, find_unused_parameters=False)
             else:    
@@ -134,7 +132,6 @@ class BaseTrainer(object):
             other_tools.load_checkpoints(self.eval_copy, args.data_path+args.e_path, args.e_name)
             other_tools.load_checkpoints(self.eval_model, args.data_path+args.e_path, args.e_name)
             if self.args.ddp:
-                self.eval_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.eval_model, process_group)   
                 self.eval_model = DDP(self.eval_model, device_ids=[self.rank], output_device=self.rank,
                                       broadcast_buffers=False, find_unused_parameters=False)
             self.eval_model.eval()
@@ -226,15 +223,44 @@ class BaseTrainer(object):
 def main_worker(rank, world_size, args):
     if not sys.warnoptions:
         warnings.simplefilter("ignore")
+    # MUST come before init_process_group so that .cuda() calls inside __init__
+    # and forward() map to the correct GPU for this rank (not always GPU 0).
+    torch.cuda.set_device(rank)
+
+    # Redirect stdout/stderr for non-rank-0 processes to per-rank log files.
+    # This makes non-rank-0 crash tracebacks visible instead of being lost.
+    log_dir = os.environ.get("RANK_LOG_DIR", None)
+    if rank != 0 and log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+        _logfile = open(os.path.join(log_dir, f"rank_{rank}.log"), "w", buffering=1)
+        sys.stdout = _logfile
+        sys.stderr = _logfile
+
     dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
         
     logger_tools.set_args_and_logger(args, rank)
     other_tools.set_random_seed(args)
     other_tools.print_exp_info(args)
       
-    trainer = __import__(f"{args.trainer}_trainer", fromlist=["something"]).CustomTrainer(args) if args.trainer != "base" else BaseTrainer(args) 
-    logger.info("Training from scratch ...")          
+    trainer = __import__(f"{args.trainer}_trainer", fromlist=["something"]).CustomTrainer(args) if args.trainer != "base" else BaseTrainer(args)
     start_time = time.time()
+
+    # Resume from checkpoint (all ranks must load so DDP weights stay in sync)
+    resume_ckpt = getattr(args, "load_ckpt", None)
+    if resume_ckpt and str(resume_ckpt) not in ("", "None", "none"):
+        if os.path.exists(resume_ckpt):
+            logger.info(f"[rank {rank}] Resuming from checkpoint: {resume_ckpt}")
+            other_tools.load_checkpoints(trainer.model, resume_ckpt, args.g_name)
+            logger.info(f"[rank {rank}] Checkpoint loaded successfully")
+        else:
+            logger.warning(f"[rank {rank}] Checkpoint '{resume_ckpt}' not found — starting from scratch")
+    else:
+        logger.info("Training from scratch ...")
+
+    # Synchronise all ranks after (potentially slow) init and checkpoint loading
+    # before entering the training loop that requires collective ops.
+    dist.barrier()
+
     if args.inference:
         if rank == 0:
             if load_ckpt := args.load_ckpt:
@@ -267,7 +293,8 @@ def main_worker(rank, world_size, args):
     # trainer.model.eval()
     # fid = trainer.test(400)
     # exit(0)
-    for epoch in range(args.epochs+1):
+    start_epoch = getattr(args, "start_epoch", 0)
+    for epoch in range(start_epoch, args.epochs+1):
         epoch_time = time.time()-start_time
         if trainer.rank == 0: logger.info("Time info >>>>  elapsed: %.2f mins\t"%(epoch_time/60)+"remain: %.2f mins"%((args.epochs/(epoch+1e-7)-1)*epoch_time/60))
         if epoch != args.epochs:
@@ -291,13 +318,15 @@ def main_worker(rank, world_size, args):
                 is_best = (fid is not None) and (fid < getattr(trainer, "best_fid", float("inf")))
                 if is_best:
                     trainer.best_fid = fid
-                    ckpt_name = f"best_{epoch}.bin"
                     other_tools.save_checkpoints(
-                    os.path.join(trainer.checkpoint_path, ckpt_name),
+                        os.path.join(trainer.checkpoint_path, f"best_{epoch}.bin"),
+                        trainer.model, opt=None, epoch=None, lrs=None
+                    )
+                # Always save a last checkpoint so training can be resumed
+                other_tools.save_checkpoints(
+                    os.path.join(trainer.checkpoint_path, f"last_{epoch}.bin"),
                     trainer.model, opt=None, epoch=None, lrs=None
                 )
-                # else:
-                #     ckpt_name = f"last_{epoch}.bin"
 
                
 
@@ -318,8 +347,10 @@ def main_worker(rank, world_size, args):
     
             
 if __name__ == "__main__":
-    os.environ["MASTER_ADDR"]='127.0.0.1'
-    os.environ["MASTER_PORT"]='8680'
+    # Use setdefault so the calling shell script can override MASTER_PORT
+    # to avoid collisions when multiple jobs run on the same node.
+    os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
+    os.environ.setdefault("MASTER_PORT", "8680")
     args = config.parse_args()
     if args.ddp:
         mp.set_start_method("spawn", force=True)
@@ -329,5 +360,4 @@ if __name__ == "__main__":
             nprocs=len(args.gpus),
                 )
     else:
-        
         main_worker(0, 1, args)

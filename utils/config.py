@@ -237,6 +237,7 @@ def parse_args():
     
     # --------------- training ------------------------- #
     parser.add("--epochs", default=120, type=int)
+    parser.add("--start_epoch", default=0, type=int)  # set >0 to resume mid-run
     parser.add("--epoch_stage", default=0, type=int)
     parser.add("--grad_norm", default=0, type=float)
     parser.add("--no_adv_epoch", default=999, type=int)
