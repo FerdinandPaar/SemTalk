@@ -39,10 +39,12 @@ START_EPOCH=${START_EPOCH:-132}
 
 LOAD_CKPT_ARG=""
 START_EPOCH_ARG=""
+EFFECTIVE_START_EPOCH=0
 if [ -n "$RESUME_CKPT" ] && [ "$RESUME_CKPT" != "none" ] && [ -f "$RESUME_CKPT" ]; then
     echo "Resuming from : $RESUME_CKPT  (start_epoch=$START_EPOCH)"
     LOAD_CKPT_ARG="--load_ckpt $RESUME_CKPT"
     START_EPOCH_ARG="--start_epoch $START_EPOCH"
+    EFFECTIVE_START_EPOCH=$START_EPOCH
 else
     echo "Starting fresh (checkpoint '$RESUME_CKPT' not found or not set)"
 fi
@@ -58,6 +60,9 @@ export NCCL_SHM_DISABLE=0
 # so non-rank-0 tracebacks appear in their per-rank log files.
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 export NCCL_DEBUG=WARN
+# Fail fast: 2-minute NCCL timeout instead of default 10 minutes
+export NCCL_TIMEOUT=600   # test() takes ~150s; 600s gives 10x headroom
+# Note: CUDA_LAUNCH_BLOCKING=1 is set per-mode below (only 4-GPU needs it)
 
 # =====================================================================
 if [ "$MODE_CHOICE" = "1" ]; then
@@ -68,6 +73,7 @@ if [ "$MODE_CHOICE" = "1" ]; then
     echo "  resume from  : ${RESUME_CKPT:-none}"
     echo ""
 
+    CUDA_LAUNCH_BLOCKING=0 \
     CUDA_VISIBLE_DEVICES=0 \
     python train.py \
         --config configs/semtalk_moclip_sparse.yaml \
@@ -83,22 +89,28 @@ else
     CUDA_MAP=$(seq 0 $(( NUM_GPUS - 1 )) | tr '\n' ',' | sed 's/,$//')
 
     echo ""
-    echo "=== 4-GPU DDP mode === per-rank logs → rank_0.log … rank_3.log ==="
+    echo "=== 4-GPU torchrun mode === per-rank logs → outputs/rank_logs/rank_*.log ==="
     echo "  GPUs             : $CUDA_MAP"
     echo "  master_addr:port : $MASTER_ADDR:$MASTER_PORT"
     echo "  per-GPU batch    : 64  (effective total: $(( 64 * NUM_GPUS )))"
     echo "  resume from      : ${RESUME_CKPT:-none}"
-    echo "  start_epoch      : ${START_EPOCH:-0}"
+  echo "  start_epoch      : ${EFFECTIVE_START_EPOCH}"
     echo ""
-    echo "  Tail logs with:  tail -f rank_1.log rank_2.log rank_3.log"
+    echo "  Tail logs with:  tail -f outputs/rank_logs/rank_1.log"
     echo ""
 
-    # RANK_LOG_DIR is read by train.py to redirect non-rank-0 output
     export RANK_LOG_DIR="$(pwd)/outputs/rank_logs"
     mkdir -p "$RANK_LOG_DIR"
 
+    # torchrun (python -m torch.distributed.run) creates one subprocess per rank.
+    # Non-rank-0 Python stdout+stderr is redirected to rank_N.log by train.py itself.
+    CUDA_LAUNCH_BLOCKING=1 \
     CUDA_VISIBLE_DEVICES=$CUDA_MAP \
-    python train.py \
+    /home/ferpaa/miniconda3/envs/semtalk/bin/python -m torch.distributed.run \
+        --nproc_per_node=$NUM_GPUS \
+        --master_addr=$MASTER_ADDR \
+        --master_port=$MASTER_PORT \
+        train.py \
         --config configs/semtalk_moclip_sparse.yaml \
         --ddp True \
         --gpus $GPU_IDS \

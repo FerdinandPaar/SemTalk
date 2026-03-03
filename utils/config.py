@@ -315,6 +315,19 @@ def parse_args():
     
     # logging
     parser.add("--log_period", default=100, type=int)
+
+    # Flow-Matching base toggle
+    parser.add("--use_flow_matching", default=False, type=str2bool)
+    parser.add("--fm_base_ckpt", default=None, type=str)
+
+    # S-VIB (Semantic Variational Information Bottleneck)
+    parser.add("--vib_enabled", default=True, type=str2bool)
+    parser.add("--vib_z_dim", default=16, type=int)
+    parser.add("--vib_timing_dim", default=64, type=int)
+    parser.add("--vib_beta_target", default=0.001, type=float)
+    parser.add("--vib_warmup_start", default=20, type=int)
+    parser.add("--vib_warmup_end", default=100, type=int)
+    parser.add("--vib_free_bits", default=0.5, type=float)
   
     
     args = parser.parse_args()

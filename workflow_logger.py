@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""
+Workflow Logger — Interactive development session logger for SemTalk.
+Captures Git state and your session notes, then appends a Markdown entry
+to DEVELOPMENT_LOG.md.
+
+Run via VS Code: Ctrl+Shift+B  (build task)
+Run directly:   python workflow_logger.py
+"""
+
+import subprocess
+import sys
+import textwrap
+from datetime import datetime
+from pathlib import Path
+
+LOG_FILE = Path(__file__).parent / "DEVELOPMENT_LOG.md"
+SEPARATOR = "---"
+
+
+# ── Git helpers ──────────────────────────────────────────────────────────────
+
+def _run(cmd: list[str]) -> str:
+    """Run a shell command and return stdout, or an error string."""
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=True,
+            cwd=Path(__file__).parent
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        return f"[git error: {exc.stderr.strip()}]"
+    except FileNotFoundError:
+        return "[git not found]"
+
+
+def get_git_hash() -> str:
+    return _run(["git", "rev-parse", "HEAD"])
+
+
+def get_short_hash() -> str:
+    return _run(["git", "rev-parse", "--short", "HEAD"])
+
+
+def get_branch() -> str:
+    return _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+
+
+def get_last_commits(n: int = 3) -> list[str]:
+    """Return the last *n* commit messages as a list."""
+    raw = _run(["git", "log", f"-{n}", "--pretty=format:%h %s"])
+    if raw.startswith("[git"):
+        return [raw]
+    return raw.splitlines()
+
+
+# ── CLI prompt helpers ────────────────────────────────────────────────────────
+
+def _divider(char: str = "─", width: int = 60) -> None:
+    print(char * width)
+
+
+def _prompt_multiline(label: str, hint: str = "") -> str:
+    """
+    Collect multi-line input until the user enters a blank line.
+    Returns the text as a single string (newlines preserved).
+    """
+    if hint:
+        print(f"  ({hint})")
+    print("  [Enter a blank line when done]")
+    lines: list[str] = []
+    while True:
+        try:
+            line = input("  > ")
+        except EOFError:
+            break
+        if line == "":
+            break
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def collect_session_data() -> dict:
+    print()
+    _divider("═")
+    print("  WORKFLOW LOGGER — SemTalk Development Session")
+    _divider("═")
+    print(f"  Date    : February 24, 2026")
+    print(f"  Branch  : {get_branch()}")
+    print(f"  Commit  : {get_short_hash()}")
+    _divider()
+    print()
+
+    data: dict = {}
+
+    print("1. THE BIGGER PICTURE")
+    print("   What are you trying to achieve in this session?")
+    data["bigger_picture"] = _prompt_multiline("bigger_picture")
+    print()
+
+    print("2. RESULTS")
+    print("   What actually happened? Did the code run? Any metrics?")
+    data["results"] = _prompt_multiline("results")
+    print()
+
+    print("3. INTERESTING FINDINGS")
+    print("   Bugs, weird behaviours, or 'Aha!' moments.")
+    data["findings"] = _prompt_multiline("findings", hint="Leave blank if nothing notable")
+    print()
+
+    _divider()
+    return data
+
+
+# ── Markdown formatter ────────────────────────────────────────────────────────
+
+def _md_list(items: list[str], bullet: str = "-") -> str:
+    return "\n".join(f"{bullet} `{item}`" for item in items)
+
+
+def _md_blockquote(text: str) -> str:
+    if not text:
+        return "> *(none)*"
+    lines = text.splitlines()
+    return "\n".join(f"> {line}" if line.strip() else ">" for line in lines)
+
+
+def build_markdown_entry(data: dict) -> str:
+    short_hash = get_short_hash()
+    full_hash  = get_git_hash()
+    branch     = get_branch()
+    commits    = get_last_commits(3)
+
+    # Fixed timestamp per user requirement
+    timestamp = "February 24, 2026"
+
+    commits_md = _md_list(commits)
+
+    bigger_picture = _md_blockquote(data.get("bigger_picture", ""))
+    results        = _md_blockquote(data.get("results", ""))
+    findings_raw   = data.get("findings", "").strip()
+    findings       = _md_blockquote(findings_raw) if findings_raw else "> *(nothing notable)*"
+
+    entry = textwrap.dedent(f"""\
+
+        ## Session — {timestamp}
+
+        | Field    | Value |
+        |----------|-------|
+        | Branch   | `{branch}` |
+        | Commit   | [`{short_hash}`]({full_hash}) |
+
+        ### Recent Commits (last 3)
+
+        {commits_md}
+
+        ### The Bigger Picture
+
+        {bigger_picture}
+
+        ### Results
+
+        {results}
+
+        ### Interesting Findings
+
+        {findings}
+
+        {SEPARATOR}
+    """)
+    return entry
+
+
+# ── Log writer ────────────────────────────────────────────────────────────────
+
+def ensure_log_header() -> None:
+    """Create DEVELOPMENT_LOG.md with a header if it does not exist."""
+    if not LOG_FILE.exists():
+        header = textwrap.dedent("""\
+            # Development Log — SemTalk
+
+            Auto-generated by `workflow_logger.py`.
+            Each entry captures the Git state and session notes for a work session.
+
+            ---
+        """)
+        LOG_FILE.write_text(header, encoding="utf-8")
+        print(f"  Created {LOG_FILE.name}")
+
+
+def append_entry(entry: str) -> None:
+    ensure_log_header()
+    with LOG_FILE.open("a", encoding="utf-8") as f:
+        f.write(entry)
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+def main() -> None:
+    try:
+        data = collect_session_data()
+    except KeyboardInterrupt:
+        print("\n\n  Aborted — nothing was logged.")
+        sys.exit(0)
+
+    entry = build_markdown_entry(data)
+
+    print("\nPreview of the entry that will be appended:\n")
+    _divider("·")
+    print(entry)
+    _divider("·")
+
+    try:
+        confirm = input("\n  Append to DEVELOPMENT_LOG.md? [Y/n]: ").strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        confirm = "n"
+
+    if confirm in ("", "y", "yes"):
+        append_entry(entry)
+        print(f"\n  Logged to {LOG_FILE}")
+    else:
+        print("\n  Discarded — nothing was logged.")
+
+
+if __name__ == "__main__":
+    main()
