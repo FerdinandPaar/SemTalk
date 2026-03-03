@@ -24,6 +24,9 @@ variational: False
 load_ckpt: ./weights/best_semtalk_sparse.bin
 # base_ckpt: ./weights/best_semtalk_base.bin
 
+# Flow-Matching toggle (set true + fm_base_ckpt to use FM base instead of semtalk_base)
+use_flow_matching: false
+
 
 # data config
 training_speakers: [2] 

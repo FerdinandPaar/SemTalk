@@ -27,6 +27,13 @@ import pickle
 import clip
 from src.utils.moclip_utils import load_tmr_text_encoder, load_moclip_text_encoder
 
+# ── Flow-Matching base model (optional) ──
+try:
+    from models.flow_matching_base import GestureLSMBaseMotion
+    _FM_AVAILABLE = True
+except ImportError:
+    _FM_AVAILABLE = False
+
 class CustomTrainer(train.BaseTrainer):
     def __init__(self, args):
         super().__init__(args)
@@ -53,17 +60,37 @@ class CustomTrainer(train.BaseTrainer):
         for joint_name in self.tar_joint_list_lower:
             self.joint_mask_lower[self.ori_joint_list[joint_name][1] - self.ori_joint_list[joint_name][0]:self.ori_joint_list[joint_name][1]] = 1
 
-        self.tracker = other_tools.EpochTracker([ "reg","reg_s","reg_w","gate","gate_self","gate_word","sem","sem_self","sem_word", "hubert","beat","hubert_sem","beat_sem", "acc_face", "acc_hands", "acc_upper", "acc_lower", "fid", "l1div", "bc", "rec", "trans", "vel", "transv", 'dis', 'gen', 'acc', 'transa', 'exp', 'lvd', 'mse', "cls", "rec_face", "latent", "cls_full", "cls_self", "cls_word", "latent_word","latent_self"], [False,True,True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False,False,False,False,  False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False])
+        self.tracker = other_tools.EpochTracker([ "reg","reg_s","reg_w","gate","gate_self","gate_word","sem","sem_self","sem_word", "hubert","beat","hubert_sem","beat_sem", "acc_face", "acc_hands", "acc_upper", "acc_lower", "fid", "l1div", "bc", "rec", "trans", "vel", "transv", 'dis', 'gen', 'acc', 'transa', 'exp', 'lvd', 'mse', "cls", "rec_face", "latent", "cls_full", "cls_self", "cls_word", "latent_word","latent_self", "kl_val","kl_self","kl_word","vib_beta","gate_mu_norm"], [False,True,True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False,False,False,False,  False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False, False,False,False,False,False])
         ##### vq_model #####
         vq_model_module = __import__(f"models.motion_representation", fromlist=["something"])
         rvq_model_module = __import__(f"models.rvq", fromlist=["something"])
         base_model_module = __import__(f"models.semtalk", fromlist=["something"])
 
-        self.semtalk_base = getattr(base_model_module, "semtalk_base")(self.args).to(self.rank)
-        try:
-            other_tools.load_checkpoints(self.semtalk_base, self.args.base_ckpt, 'semtalk_base')
-        except Exception as e:
-            logger.warning(f"Failed to load base model checkpoint: {e}. Starting with an uninitialized model.")
+        # ── Pluggable base-motion module ──
+        # Set  use_flow_matching: true  in the YAML config to swap in the
+        # GestureLSM Flow-Matching base instead of the original semtalk_base.
+        self.use_flow_matching = bool(getattr(self.args, "use_flow_matching", False))
+
+        if self.use_flow_matching:
+            assert _FM_AVAILABLE, (
+                "use_flow_matching=True but models/flow_matching_base.py could not be imported. "
+                "Check that the file exists and has no import errors."
+            )
+            logger.info("[sparse_trainer] Using GestureLSMBaseMotion (Flow-Matching) as base module")
+            self.semtalk_base = GestureLSMBaseMotion(self.args).to(self.rank)
+            _fm_ckpt = getattr(self.args, "fm_base_ckpt", None) or getattr(self.args, "base_ckpt", None)
+            if _fm_ckpt:
+                try:
+                    other_tools.load_checkpoints(self.semtalk_base, _fm_ckpt, 'GestureLSMBaseMotion')
+                except Exception as e:
+                    logger.warning(f"Failed to load FM base checkpoint: {e}. Starting with uninit FM model.")
+        else:
+            logger.info("[sparse_trainer] Using original semtalk_base as base module")
+            self.semtalk_base = getattr(base_model_module, "semtalk_base")(self.args).to(self.rank)
+            try:
+                other_tools.load_checkpoints(self.semtalk_base, self.args.base_ckpt, 'semtalk_base')
+            except Exception as e:
+                logger.warning(f"Failed to load base model checkpoint: {e}. Starting with an uninitialized model.")
         
         
         self.args.vae_layer = 2
@@ -90,6 +117,7 @@ class CustomTrainer(train.BaseTrainer):
         self.args.vae_layer = 4
         self.global_motion = getattr(vq_model_module, "VAEConvZero")(self.args).to(self.rank)
         other_tools.load_checkpoints(self.global_motion, "./weights/pretrained_vq/last_1700_foot.bin", args.e_name)
+        print(f"[rank {self.rank}] all VQ checkpoints loaded — GPU mem: {torch.cuda.memory_allocated()/1e9:.2f} GB", flush=True)
 
         self.args.vae_test_dim = 330
         self.args.vae_layer = 4
@@ -108,7 +136,37 @@ class CustomTrainer(train.BaseTrainer):
         self.log_softmax = nn.LogSoftmax(dim=2).to(self.rank)
         self.reclatent_loss_test = nn.MSELoss().to(self.rank)
         self.gate_fuc = nn.CrossEntropyLoss().to(self.rank)
-    
+
+        # ── S-VIB KL hyper-parameters ──
+        self._vib_enabled = getattr(args, 'vib_enabled', True)
+        self._vib_beta_target  = getattr(args, 'vib_beta_target',  0.001)
+        self._vib_warmup_start = getattr(args, 'vib_warmup_start', 20)
+        self._vib_warmup_end   = getattr(args, 'vib_warmup_end',   100)
+        self._vib_free_bits    = getattr(args, 'vib_free_bits',     0.5)
+
+    # ── S-VIB helpers ────────────────────────────────────────────────
+    def _compute_vib_beta(self, epoch):
+        """Sigmoid warmup: 0 → beta_target over [warmup_start, warmup_end]."""
+        if not self._vib_enabled:
+            return 0.0
+        if epoch < self._vib_warmup_start:
+            return 0.0
+        t = (epoch - self._vib_warmup_start) / max(self._vib_warmup_end - self._vib_warmup_start, 1)
+        t = min(t, 1.0)
+        # sigmoid-shaped ramp: 6*(t-0.5) gives ~0 at t=0 and ~1 at t=1
+        import math
+        sig = 1.0 / (1.0 + math.exp(-6.0 * (t - 0.5)))
+        return self._vib_beta_target * sig
+
+    @staticmethod
+    def _compute_kl_loss(mu, logvar, free_bits=0.5):
+        """Per-dim KL with free-bits guard, mean-reduced."""
+        # KL per dimension: 0.5 * (mu^2 + var - logvar - 1)
+        kl_per_dim = 0.5 * (mu.pow(2) + logvar.exp() - logvar - 1)
+        # Free-bits: clamp per-dim KL to at least `free_bits`
+        kl_per_dim = torch.clamp(kl_per_dim, min=free_bits)
+        return kl_per_dim.mean()
+
     def inverse_selection(self, filtered_t, selection_array, n):
         original_shape_t = np.zeros((n, selection_array.size))
         selected_indices = np.where(selection_array == 1)[0]
@@ -144,6 +202,7 @@ class CustomTrainer(train.BaseTrainer):
         return obj  # 其余类型原样返回
   
     def _g_training(self, loaded_data, use_adv, mode="train", epoch=0):
+        vib_beta = self._compute_vib_beta(epoch)
         bs, n, j = loaded_data["tar_pose"].shape[0], loaded_data["tar_pose"].shape[1], self.joints
         # print('train data n:', n) 
         # ------ full generatation task ------ #
@@ -169,6 +228,15 @@ class CustomTrainer(train.BaseTrainer):
         gate_val = net_out_val["gate"]
         
         loss_gate_val = self.gate_fuc(gate_val.reshape(-1, 2), sem_label)
+        # ── S-VIB KL for gate_val ──
+        if self._vib_enabled:
+            kl_val = self._compute_kl_loss(net_out_val["gate_mu"], net_out_val["gate_logvar"], self._vib_free_bits)
+            loss_gate_val = loss_gate_val + vib_beta * kl_val
+            self.tracker.update_meter("kl_val", "train", kl_val.item())
+            self.tracker.update_meter("vib_beta", "train", vib_beta)
+            # Diagnostic: ‖μ‖ tracks posterior collapse (→0 = collapsed)
+            mu_norm = net_out_val["gate_mu"].detach().norm(dim=-1).mean().item()
+            self.tracker.update_meter("gate_mu_norm", "train", mu_norm)
         self.tracker.update_meter("sem", "train", loss_gate_val.item())
         gate_class_pred_val = torch.softmax(gate_val, dim=-1)
         gate_class_1 = torch.argmax(gate_class_pred_val, dim=-1)
@@ -251,6 +319,11 @@ class CustomTrainer(train.BaseTrainer):
                 use_attentions = True, use_word=False,hubert=loaded_data['hubert'],latent = latent_self,epoch=epoch)
             gate_self = net_out_self["gate"]
             loss_gate_self = self.gate_fuc(gate_self.reshape(-1, 2), sem_label)
+            # ── S-VIB KL for gate_self ──
+            if self._vib_enabled:
+                kl_self = self._compute_kl_loss(net_out_self["gate_mu"], net_out_self["gate_logvar"], self._vib_free_bits)
+                loss_gate_self = loss_gate_self + vib_beta * kl_self
+                self.tracker.update_meter("kl_self", "train", kl_self.item())
             self.tracker.update_meter("sem_self", "train", loss_gate_self.item())
             gate_class_self_pre = torch.softmax(gate_self, dim=-1)
             gate_class_2 = torch.argmax(gate_class_self_pre, dim=-1)
@@ -318,6 +391,11 @@ class CustomTrainer(train.BaseTrainer):
                 use_attentions = True, use_word=True,hubert=loaded_data['hubert'],latent = latent_word,epoch=epoch)
             gate_word = net_out_word["gate"]
             loss_gate_word = self.gate_fuc(gate_word.reshape(-1, 2), sem_label)
+            # ── S-VIB KL for gate_word ──
+            if self._vib_enabled:
+                kl_word = self._compute_kl_loss(net_out_word["gate_mu"], net_out_word["gate_logvar"], self._vib_free_bits)
+                loss_gate_word = loss_gate_word + vib_beta * kl_word
+                self.tracker.update_meter("kl_word", "train", kl_word.item())
             self.tracker.update_meter("sem_word", "train", loss_gate_word.item())
             gate_class_word_pre = torch.softmax(gate_word, dim=-1)
             gate_class_3= torch.argmax(gate_class_word_pre, dim=-1)

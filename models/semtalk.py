@@ -77,6 +77,73 @@ class PeriodicPositionalEncoding(nn.Module):
         x = x + self.pe[:, :x.size(1), :]
         return self.dropout(x)
 
+class SemanticVIB(nn.Module):
+    """
+    Two-stream Semantic Variational Information Bottleneck (S-VIB).
+    Replaces the hard gate (nn.Linear(256, 2)).
+
+    Stream A (semantic):  body_semantic_down  [bs, T, 256]  — WHAT content
+    Stream B (timing):    in_word_body_down   [bs, T, 256]  — WHEN onset (low-cap)
+
+    The timing stream is deliberately bottlenecked to prevent full HuBERT
+    rhythm from leaking into the semantic gate decision.
+    """
+    def __init__(self, sem_dim=256, timing_dim=64, z_dim=16):
+        super(SemanticVIB, self).__init__()
+        self.z_dim = z_dim
+        self.timing_dim = timing_dim
+
+        # Low-capacity timing projection — bottleneck HuBERT to onset-only
+        self.timing_proj = nn.Sequential(
+            nn.Linear(sem_dim, timing_dim),
+            nn.LayerNorm(timing_dim),
+            nn.GELU(),
+        )
+
+        in_dim = sem_dim + timing_dim  # 256 + 64 = 320
+
+        # VIB encoder heads
+        self.fc_mu     = nn.Linear(in_dim, z_dim)
+        self.fc_logvar = nn.Linear(in_dim, z_dim)
+
+        # Classifier: z -> gate logits
+        self.classifier = nn.Sequential(
+            nn.Linear(z_dim, z_dim * 2),
+            nn.GELU(),
+            nn.Linear(z_dim * 2, 2),
+        )
+
+    def reparameterize(self, mu, logvar):
+        """z = mu + std * eps during training; mu at inference."""
+        if self.training:
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            return mu + std * eps
+        return mu
+
+    def forward(self, body_semantic_down, in_word_body_down):
+        """
+        Args:
+            body_semantic_down: [bs, T, 256] — semantic content stream
+            in_word_body_down:  [bs, T, 256] — HuBERT-derived timing stream
+        Returns:
+            gate_logits: [bs, T, 2]
+            mu:          [bs, T, z_dim]
+            logvar:      [bs, T, z_dim]
+        """
+        timing = self.timing_proj(in_word_body_down)           # [bs, T, 64]
+        x = torch.cat([body_semantic_down, timing], dim=-1)   # [bs, T, 320]
+
+        mu     = self.fc_mu(x)                                 # [bs, T, z_dim]
+        logvar = self.fc_logvar(x)
+        logvar = torch.clamp(logvar, -10.0, 2.0)              # stability
+
+        z = self.reparameterize(mu, logvar)                    # [bs, T, z_dim]
+        gate_logits = self.classifier(z)                       # [bs, T, 2]
+
+        return gate_logits, mu, logvar
+
+
 class predict_residual_zq(nn.Module):
     def __init__(self,latent_dim=256,num_head = 8,ffn_dim = 1024, dropout = 0.1, n_tokens = 5):
         super(predict_residual_zq, self).__init__()
@@ -852,7 +919,15 @@ class semtalk_sparse(nn.Module):
             ])
         self.audio_pre_encoder_body = MLP(3, args.hidden_size, 256)
         self.at_attn_bert = nn.Linear(args.audio_f*2, args.audio_f*2)
-        self.gate = nn.Linear(256, 2)
+        # ── S-VIB gate (replaces old nn.Linear(256, 2)) ──
+        _vib_enabled = getattr(args, 'vib_enabled', True)
+        self._vib_enabled = _vib_enabled
+        if _vib_enabled:
+            _vib_z   = getattr(args, 'vib_z_dim', 16)
+            _vib_t   = getattr(args, 'vib_timing_dim', 64)
+            self.gate = SemanticVIB(sem_dim=256, timing_dim=_vib_t, z_dim=_vib_z)
+        else:
+            self.gate = nn.Linear(256, 2)
         ######## clip / moclip embedding #########
         clip_dim = getattr(args, 'clip_dim', 512)  # 512 for ViT-B/32, 768 for ViT-L/14
         self.clip_embedding = nn.Linear(clip_dim, 256)
@@ -979,13 +1054,26 @@ class semtalk_sparse(nn.Module):
         bert_body_pre = self.semantic_position_embeddings(in_bert_body)
 
         body_semantic = self.semantic_body_decoder(tgt=bert_body_pre, memory=fusion_body_semantic)
+        # ── Keep pure semantic for downstream (no fusion_bert leakage) ──
+        body_semantic_pure = body_semantic  # [bs, t, 256] — unmixed
         alpha_at_bert = torch.cat([body_semantic, in_word_body], dim=-1).reshape(bs, t, c*2)
         alpha_at_bert = self.at_attn_bert(alpha_at_bert).reshape(bs, t, c, 2)
         alpha_at_bert = alpha_at_bert.softmax(dim=-1)
         fusion_bert = body_semantic * alpha_at_bert[:,:,:,1] + in_word_body * alpha_at_bert[:,:,:,0]
-        fusion_bert_down = fusion_bert.reshape(bs, t//4, 4, c).mean(dim=2)
-        gate = self.gate(fusion_bert_down)
-        body_semantic = self.body_semantic_mlp(fusion_bert)
+
+        # ── S-VIB gate (two-stream) ──
+        if self._vib_enabled:
+            body_semantic_down = body_semantic_pure.reshape(bs, t//4, 4, c).mean(dim=2)  # [bs, t//4, 256]
+            in_word_body_down  = in_word_body.reshape(bs, t//4, 4, c).mean(dim=2)        # [bs, t//4, 256]
+            gate, gate_mu, gate_logvar = self.gate(body_semantic_down, in_word_body_down)
+        else:
+            fusion_bert_down = fusion_bert.reshape(bs, t//4, 4, c).mean(dim=2)
+            gate = self.gate(fusion_bert_down)
+            gate_mu = None
+            gate_logvar = None
+
+        # ── Use pure body_semantic through MLP (NOT fusion_bert) ──
+        body_semantic = self.body_semantic_mlp(body_semantic_pure)
         gate_pred = torch.softmax(gate, dim=-1)
 
         body_gate = gate_pred[:,:,1].unsqueeze(2).repeat(1, 1, 4).reshape(bs, t, 1)
@@ -1093,6 +1181,8 @@ class semtalk_sparse(nn.Module):
         rec_hands = torch.stack([hands_latent, zq1_hands, zq2_hands, zq3_hands, zq4_hands, zq5_hands], dim=1).unsqueeze(2)
         return {
             "gate":gate,
+            "gate_mu":gate_mu,
+            "gate_logvar":gate_logvar,
             "rec_upper":rec_upper,
             "rec_lower":rec_lower,
             "rec_hands":rec_hands,

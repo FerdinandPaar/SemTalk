@@ -24,6 +24,9 @@ variational: False
 load_ckpt: None
 base_ckpt: ./weights/best_semtalk_base.bin
 
+# Flow-Matching toggle (set true + fm_base_ckpt to use FM base instead of semtalk_base)
+use_flow_matching: false
+
 # -------- TMR / MoCLIP-specific --------
 # semantic_encoder: 'tmr' triggers the TMR code path; 'clip' keeps vanilla CLIP
 semantic_encoder: tmr
@@ -96,6 +99,15 @@ g_name: semtalk_sparse
 trainer: semtalk_sparse
 hidden_size: 768
 n_layer: 1
+
+# ── S-VIB (Semantic Variational Information Bottleneck) ──
+vib_enabled: true
+vib_z_dim: 16
+vib_timing_dim: 64
+vib_beta_target: 0.001
+vib_warmup_start: 20
+vib_warmup_end: 100
+vib_free_bits: 0.5
  
 rec_weight: 1
 grad_norm: 0.99

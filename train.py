@@ -204,12 +204,15 @@ class BaseTrainer(object):
             metric = states['train']
             if metric.count > 0:
                 pstr += "{}: {:.3f}\t".format(name, metric.avg)
-                self.writer.add_scalar(f"train/{name}", metric.avg, epoch*self.train_length+its) if self.args.stat == "ts" else wandb.log({name: metric.avg}, step=epoch*self.train_length+its)
+                if self.rank == 0:
+                    self.writer.add_scalar(f"train/{name}", metric.avg, epoch*self.train_length+its) if self.args.stat == "ts" else wandb.log({name: metric.avg}, step=epoch*self.train_length+its)
         pstr += "glr: {:.1e}\t".format(lr_g)
-        self.writer.add_scalar("lr/glr", lr_g, epoch*self.train_length+its) if self.args.stat == "ts" else wandb.log({'glr': lr_g}, step=epoch*self.train_length+its)
+        if self.rank == 0:
+            self.writer.add_scalar("lr/glr", lr_g, epoch*self.train_length+its) if self.args.stat == "ts" else wandb.log({'glr': lr_g}, step=epoch*self.train_length+its)
         if lr_d is not None:
             pstr += "dlr: {:.1e}\t".format(lr_d)
-            self.writer.add_scalar("lr/dlr", lr_d, epoch*self.train_length+its) if self.args.stat == "ts" else wandb.log({'dlr': lr_d}, step=epoch*self.train_length+its)
+            if self.rank == 0:
+                self.writer.add_scalar("lr/dlr", lr_d, epoch*self.train_length+its) if self.args.stat == "ts" else wandb.log({'dlr': lr_d}, step=epoch*self.train_length+its)
         pstr += "dtime: %04d\t"%(t_data*1000)        
         pstr += "ntime: %04d\t"%(t_train*1000)
         pstr += "mem: {:.2f} ".format(mem_cost*len(self.args.gpus))
@@ -219,30 +222,51 @@ class BaseTrainer(object):
         self.tracker.update_meter(dict_name, "test", value)
         _ = self.tracker.update_values(dict_name, 'test', epoch)
 
-@logger.catch
+@logger.catch(reraise=True)
 def main_worker(rank, world_size, args):
     if not sys.warnoptions:
         warnings.simplefilter("ignore")
-    # MUST come before init_process_group so that .cuda() calls inside __init__
-    # and forward() map to the correct GPU for this rank (not always GPU 0).
-    torch.cuda.set_device(rank)
 
     # Redirect stdout/stderr for non-rank-0 processes to per-rank log files.
-    # This makes non-rank-0 crash tracebacks visible instead of being lost.
+    # IMPORTANT: also dup2 fds 1 & 2 so that C-level CUDA/NCCL error messages
+    # (which bypass Python's sys.stderr) are captured in the log files.
     log_dir = os.environ.get("RANK_LOG_DIR", None)
     if rank != 0 and log_dir:
         os.makedirs(log_dir, exist_ok=True)
-        _logfile = open(os.path.join(log_dir, f"rank_{rank}.log"), "w", buffering=1)
+        _logpath = os.path.join(log_dir, f"rank_{rank}.log")
+        _logfile = open(_logpath, "w", buffering=1)
         sys.stdout = _logfile
         sys.stderr = _logfile
+        os.dup2(_logfile.fileno(), 1)   # redirect fd 1 (C-level stdout)
+        os.dup2(_logfile.fileno(), 2)   # redirect fd 2 (C-level stderr / CUDA errors)
+        # Also add a loguru sink pointing to this file so @logger.catch
+        # writes exception tracebacks here rather than silently to the default sink.
+        import loguru
+        loguru.logger.add(_logfile, level="DEBUG")
 
-    dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    # Diagnostic: show what CUDA devices are visible to this rank
+    n_visible = torch.cuda.device_count()
+    print(f"[rank {rank}] CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES','unset')}  device_count={n_visible}", flush=True)
+
+    # MUST come before init_process_group so that .cuda() calls inside __init__
+    # map to the correct GPU for this rank.
+    # When CUDA_VISIBLE_DEVICES=0,1,2,3 (all visible), rank == physical device index.
+    # When torchrun restricts each process to one GPU, device_count==1 and we use 0.
+    local_device = rank if n_visible > 1 else 0
+    torch.cuda.set_device(local_device)
+    print(f"[rank {rank}] set_device({local_device})  device={torch.cuda.current_device()}", flush=True)
+
+    import datetime
+    _nccl_timeout = datetime.timedelta(seconds=int(os.environ.get("NCCL_TIMEOUT", 600)))
+    dist.init_process_group(backend="nccl", rank=rank, world_size=world_size,
+                             timeout=_nccl_timeout)
         
     logger_tools.set_args_and_logger(args, rank)
     other_tools.set_random_seed(args)
     other_tools.print_exp_info(args)
       
     trainer = __import__(f"{args.trainer}_trainer", fromlist=["something"]).CustomTrainer(args) if args.trainer != "base" else BaseTrainer(args)
+    print(f"[rank {rank}] CustomTrainer.__init__ completed — GPU mem: {torch.cuda.memory_allocated()/1e9:.2f} GB", flush=True)
     start_time = time.time()
 
     # Resume from checkpoint (all ranks must load so DDP weights stay in sync)
@@ -259,7 +283,9 @@ def main_worker(rank, world_size, args):
 
     # Synchronise all ranks after (potentially slow) init and checkpoint loading
     # before entering the training loop that requires collective ops.
+    print(f"[rank {rank}] reaching dist.barrier()", flush=True)
     dist.barrier()
+    print(f"[rank {rank}] passed dist.barrier()", flush=True)
 
     if args.inference:
         if rank == 0:
@@ -294,6 +320,7 @@ def main_worker(rank, world_size, args):
     # fid = trainer.test(400)
     # exit(0)
     start_epoch = getattr(args, "start_epoch", 0)
+    print(f"[rank {rank}] entering training loop  start_epoch={start_epoch}", flush=True)
     for epoch in range(start_epoch, args.epochs+1):
         epoch_time = time.time()-start_time
         if trainer.rank == 0: logger.info("Time info >>>>  elapsed: %.2f mins\t"%(epoch_time/60)+"remain: %.2f mins"%((args.epochs/(epoch+1e-7)-1)*epoch_time/60))
@@ -328,11 +355,13 @@ def main_worker(rank, world_size, args):
                     trainer.model, opt=None, epoch=None, lrs=None
                 )
 
-               
+        # All ranks must synchronise here: rank 0 may have spent minutes in
+        # trainer.test() while ranks 1-3 were idle.  Without this barrier,
+        # ranks 1-3 would start trainer.train(epoch+1) and hit a DDP allreduce
+        # while rank 0 is still in test() → NCCL SIGABRT.
+        if args.ddp:
+            dist.barrier()
 
-                # exit(0)
-                
-       
     # if rank == 0:
     #     for k, v in trainer.tracker.values.items():
     #         if trainer.tracker.loss_meters[k]['val'].count > 0:
@@ -353,11 +382,19 @@ if __name__ == "__main__":
     os.environ.setdefault("MASTER_PORT", "8680")
     args = config.parse_args()
     if args.ddp:
-        mp.set_start_method("spawn", force=True)
-        mp.spawn(
-            main_worker,
-            args=(len(args.gpus), args,),
-            nprocs=len(args.gpus),
-                )
+        # ── torchrun mode: LOCAL_RANK is set as an env var ──
+        # torchrun creates one process per rank; we run main_worker directly.
+        if "LOCAL_RANK" in os.environ:
+            rank       = int(os.environ["LOCAL_RANK"])
+            world_size = int(os.environ.get("WORLD_SIZE", len(args.gpus)))
+            main_worker(rank, world_size, args)
+        else:
+            # ── legacy mp.spawn fallback ──
+            mp.set_start_method("spawn", force=True)
+            mp.spawn(
+                main_worker,
+                args=(len(args.gpus), args,),
+                nprocs=len(args.gpus),
+            )
     else:
         main_worker(0, 1, args)
