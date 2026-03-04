@@ -328,6 +328,14 @@ def parse_args():
     parser.add("--vib_warmup_start", default=20, type=int)
     parser.add("--vib_warmup_end", default=100, type=int)
     parser.add("--vib_free_bits", default=0.5, type=float)
+
+    # Physics Smoother (gate-modulated per-joint EMA)
+    parser.add("--phys_enabled", default=True, type=str2bool)
+    parser.add("--phys_tau_base", default=0.15, type=float)
+    parser.add("--phys_alpha", default=1.0, type=float)
+    parser.add("--phys_lambda", default=0.01, type=float)
+    parser.add("--phys_warmup_start", default=30, type=int)
+    parser.add("--phys_warmup_end", default=80, type=int)
   
     
     args = parser.parse_args()

@@ -26,6 +26,7 @@ import librosa
 import pickle
 import clip
 from src.utils.moclip_utils import load_tmr_text_encoder, load_moclip_text_encoder
+from models.physics_smoother import PhysicsSmootherSMPLX
 
 # ── Flow-Matching base model (optional) ──
 try:
@@ -60,7 +61,7 @@ class CustomTrainer(train.BaseTrainer):
         for joint_name in self.tar_joint_list_lower:
             self.joint_mask_lower[self.ori_joint_list[joint_name][1] - self.ori_joint_list[joint_name][0]:self.ori_joint_list[joint_name][1]] = 1
 
-        self.tracker = other_tools.EpochTracker([ "reg","reg_s","reg_w","gate","gate_self","gate_word","sem","sem_self","sem_word", "hubert","beat","hubert_sem","beat_sem", "acc_face", "acc_hands", "acc_upper", "acc_lower", "fid", "l1div", "bc", "rec", "trans", "vel", "transv", 'dis', 'gen', 'acc', 'transa', 'exp', 'lvd', 'mse', "cls", "rec_face", "latent", "cls_full", "cls_self", "cls_word", "latent_word","latent_self", "kl_val","kl_self","kl_word","vib_beta","gate_mu_norm"], [False,True,True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False,False,False,False,  False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False, False,False,False,False,False])
+        self.tracker = other_tools.EpochTracker([ "reg","reg_s","reg_w","gate","gate_self","gate_word","sem","sem_self","sem_word", "hubert","beat","hubert_sem","beat_sem", "acc_face", "acc_hands", "acc_upper", "acc_lower", "fid", "l1div", "bc", "rec", "trans", "vel", "transv", 'dis', 'gen', 'acc', 'transa', 'exp', 'lvd', 'mse', "cls", "rec_face", "latent", "cls_full", "cls_self", "cls_word", "latent_word","latent_self", "kl_val","kl_self","kl_word","vib_beta","gate_mu_norm","phys_jerk","phys_beta"], [False,True,True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False,False,False,False,  False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False, False,False,False,False,False,False,False])
         ##### vq_model #####
         vq_model_module = __import__(f"models.motion_representation", fromlist=["something"])
         rvq_model_module = __import__(f"models.rvq", fromlist=["something"])
@@ -144,6 +145,25 @@ class CustomTrainer(train.BaseTrainer):
         self._vib_warmup_end   = getattr(args, 'vib_warmup_end',   100)
         self._vib_free_bits    = getattr(args, 'vib_free_bits',     0.5)
 
+        # ── Physics Smoother (gate-modulated per-joint EMA) ──
+        self._phys_enabled = getattr(args, 'phys_enabled', True)
+        self._phys_lambda       = getattr(args, 'phys_lambda',       0.01)
+        self._phys_warmup_start = getattr(args, 'phys_warmup_start', 30)
+        self._phys_warmup_end   = getattr(args, 'phys_warmup_end',   80)
+        if self._phys_enabled:
+            self.physics_smoother = PhysicsSmootherSMPLX(
+                num_joints=self.joints,
+                tau_base=getattr(args, 'phys_tau_base', 0.15),
+                alpha=getattr(args, 'phys_alpha', 1.0),
+                pose_fps=self.args.pose_fps,
+            ).to(self.rank)
+            logger.info(
+                f"[sparse_trainer] PhysicsSmootherSMPLX enabled  "
+                f"(τ_base={self.physics_smoother.tau_base}, "
+                f"α={self.physics_smoother.alpha}, "
+                f"λ={self._phys_lambda})"
+            )
+
     # ── S-VIB helpers ────────────────────────────────────────────────
     def _compute_vib_beta(self, epoch):
         """Sigmoid warmup: 0 → beta_target over [warmup_start, warmup_end]."""
@@ -166,6 +186,20 @@ class CustomTrainer(train.BaseTrainer):
         # Free-bits: clamp per-dim KL to at least `free_bits`
         kl_per_dim = torch.clamp(kl_per_dim, min=free_bits)
         return kl_per_dim.mean()
+
+    def _compute_phys_beta(self, epoch):
+        """Sigmoid warmup for physics jerk loss weight: 0 → phys_lambda."""
+        if not self._phys_enabled:
+            return 0.0
+        if epoch < self._phys_warmup_start:
+            return 0.0
+        t = (epoch - self._phys_warmup_start) / max(
+            self._phys_warmup_end - self._phys_warmup_start, 1
+        )
+        t = min(t, 1.0)
+        import math
+        sig = 1.0 / (1.0 + math.exp(-6.0 * (t - 0.5)))
+        return self._phys_lambda * sig
 
     def inverse_selection(self, filtered_t, selection_array, n):
         original_shape_t = np.zeros((n, selection_array.size))
@@ -265,7 +299,29 @@ class CustomTrainer(train.BaseTrainer):
         loss_latent = self.args.ll*loss_latent_lower + self.args.lh*loss_latent_hands + self.args.lu*loss_latent_upper
         self.tracker.update_meter("latent", "train", loss_latent.item())
         g_loss_final += loss_latent/6
-        
+
+        # ── Physics jerk loss on VQ latents ──
+        phys_beta = self._compute_phys_beta(epoch)
+        if self._phys_enabled and phys_beta > 0:
+            # Extract 0th-level latent predictions  [B, T', C]
+            latent_upper_pred = net_out_val["rec_upper"][:, 0, 0]
+            latent_hands_pred = net_out_val["rec_hands"][:, 0, 0]
+            latent_lower_pred = net_out_val["rec_lower"][:, 0, 0]
+
+            # Gate ψ — detached so physics loss does NOT push gate toward semantic
+            gate_psi_det = gate_class_pred_val[:, :, 1:2].detach()   # [B, T', 1]
+            logvar_det = (
+                net_out_val["gate_logvar"].detach()
+                if self._vib_enabled else None
+            )
+
+            phys_jerk = self.physics_smoother.compute_latent_jerk_loss(
+                latent_upper_pred, latent_hands_pred, latent_lower_pred,
+                gate_psi_det, logvar_det,
+            )
+            g_loss_final += phys_beta * phys_jerk
+            self.tracker.update_meter("phys_jerk", "train", phys_jerk.item())
+            self.tracker.update_meter("phys_beta", "train", phys_beta)
        
         self.now_epoch += 1
        
@@ -508,6 +564,9 @@ class CustomTrainer(train.BaseTrainer):
         rec_index_all_lower = []
         rec_index_all_hands = []
         sem_score = []
+        # Physics smoother: collect soft gate & logvar for inference-time EMA
+        gate_psi_all = []
+        gate_logvar_all = []
         
         roundt = (n - self.args.pre_frames) // (self.args.pose_length - self.args.pre_frames)
         remain = (n - self.args.pre_frames) % (self.args.pose_length - self.args.pre_frames)
@@ -551,6 +610,8 @@ class CustomTrainer(train.BaseTrainer):
             
             gate = net_out_val["gate"]
             gate_score = torch.softmax(gate, dim=-1)
+            gate_psi_chunk = gate_score[:, :, 1:2]              # [B, T', 1] soft semantic prob
+            gate_logvar_chunk = net_out_val.get("gate_logvar")   # [B, T', z] or None
             gate = torch.argmax(gate_score, dim=-1).unsqueeze(-1)
             rec_index_upper = self.log_softmax(semtalk_base_out["cls_upper"]).reshape(-1, self.args.vae_codebook_size,6)
             _, rec_index_upper = torch.max(rec_index_upper.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
@@ -584,12 +645,18 @@ class CustomTrainer(train.BaseTrainer):
                 rec_index_all_lower.append(rec_index_lower)
                 rec_index_all_hands.append(rec_index_hands)
                 sem_score.append(gate)
+                gate_psi_all.append(gate_psi_chunk)
+                if gate_logvar_chunk is not None:
+                    gate_logvar_all.append(gate_logvar_chunk)
             else:
                 rec_index_all_face.append(rec_index_face[:, 1:])
                 rec_index_all_upper.append(rec_index_upper[:, 1:])
                 rec_index_all_lower.append(rec_index_lower[:, 1:])
                 rec_index_all_hands.append(rec_index_hands[:, 1:])
                 sem_score.append(gate[:, 1:])
+                gate_psi_all.append(gate_psi_chunk[:, 1:])
+                if gate_logvar_chunk is not None:
+                    gate_logvar_all.append(gate_logvar_chunk[:, 1:])
 
 
             rec_upper_last = self.vq_model_upper.decode(rec_index_upper)
@@ -675,6 +742,21 @@ class CustomTrainer(train.BaseTrainer):
         rec_pose = rc.matrix_to_rotation_6d(rec_pose).reshape(bs, n, j*6)
         tar_pose = rc.axis_angle_to_matrix(tar_pose.reshape(bs*n, j, 3))
         tar_pose = rc.matrix_to_rotation_6d(tar_pose).reshape(bs, n, j*6)
+
+        # ── Physics smoother: per-joint EMA on decoded rot6d ──
+        if self._phys_enabled and len(gate_psi_all) > 0:
+            gate_psi_cat = torch.cat(gate_psi_all, dim=1)           # [B, total_T', 1]
+            gate_logvar_cat = (
+                torch.cat(gate_logvar_all, dim=1)
+                if len(gate_logvar_all) > 0 else None
+            )
+            rec_pose_6d = rec_pose.reshape(bs, n, j, 6)
+            rec_pose_6d = self.physics_smoother.forward_inference(
+                rec_pose_6d,
+                gate_psi_cat.squeeze(-1),               # [B, total_T']
+                gate_logvar_cat,
+            )
+            rec_pose = rec_pose_6d.reshape(bs, n, j * 6)
         
         return {
             'rec_pose': rec_pose,
@@ -975,6 +1057,9 @@ class CustomTrainer(train.BaseTrainer):
         rec_index_all_lower = []
         rec_index_all_hands = []
         sem_score = []
+        # Physics smoother: collect soft gate & logvar for inference-time EMA
+        gate_psi_all_inf = []
+        gate_logvar_all_inf = []
         
         roundt = len(in_sentence)
         round_l = self.args.pose_length - self.args.pre_frames
@@ -1015,6 +1100,8 @@ class CustomTrainer(train.BaseTrainer):
             
             gate = net_out_val["gate"]
             gate_score = torch.softmax(gate, dim=-1)
+            gate_psi_chunk = gate_score[:, :, 1:2]              # [B, T', 1] soft semantic prob
+            gate_logvar_chunk = net_out_val.get("gate_logvar")   # [B, T', z] or None
             gate = torch.argmax(gate_score, dim=-1).unsqueeze(-1)
             rec_index_upper = self.log_softmax(semtalk_base_out["cls_upper"]).reshape(-1, self.args.vae_codebook_size,6)
             _, rec_index_upper = torch.max(rec_index_upper.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
@@ -1048,12 +1135,18 @@ class CustomTrainer(train.BaseTrainer):
                 rec_index_all_lower.append(rec_index_lower)
                 rec_index_all_hands.append(rec_index_hands)
                 sem_score.append(gate)
+                gate_psi_all_inf.append(gate_psi_chunk)
+                if gate_logvar_chunk is not None:
+                    gate_logvar_all_inf.append(gate_logvar_chunk)
             else:
                 rec_index_all_face.append(rec_index_face[:, 1:])
                 rec_index_all_upper.append(rec_index_upper[:, 1:])
                 rec_index_all_lower.append(rec_index_lower[:, 1:])
                 rec_index_all_hands.append(rec_index_hands[:, 1:])
                 sem_score.append(gate[:, 1:])
+                gate_psi_all_inf.append(gate_psi_chunk[:, 1:])
+                if gate_logvar_chunk is not None:
+                    gate_logvar_all_inf.append(gate_logvar_chunk[:, 1:])
 
 
             rec_upper_last = self.vq_model_upper.decode(rec_index_upper)
@@ -1134,6 +1227,21 @@ class CustomTrainer(train.BaseTrainer):
         tar_exps = tar_exps[:, :n, :]
         tar_trans = tar_trans[:, :n, :]
         tar_beta = tar_beta[:, :n, :]
+
+        # ── Physics smoother: per-joint EMA on inference poses ──
+        if self._phys_enabled and len(gate_psi_all_inf) > 0:
+            gate_psi_cat = torch.cat(gate_psi_all_inf, dim=1)
+            gate_logvar_cat = (
+                torch.cat(gate_logvar_all_inf, dim=1)
+                if len(gate_logvar_all_inf) > 0 else None
+            )
+            rec_pose_6d_inf = rc.axis_angle_to_matrix(rec_pose.reshape(bs, n, j, 3))
+            rec_pose_6d_inf = rc.matrix_to_rotation_6d(rec_pose_6d_inf)  # [bs, n, 55, 6]
+            rec_pose_6d_inf = self.physics_smoother.forward_inference(
+                rec_pose_6d_inf, gate_psi_cat.squeeze(-1), gate_logvar_cat,
+            )
+            rec_pose_6d_inf = rc.rotation_6d_to_matrix(rec_pose_6d_inf)
+            rec_pose = rc.matrix_to_axis_angle(rec_pose_6d_inf).reshape(bs * n, j * 3)
       
         rec_pose_np = rec_pose.detach().cpu().numpy()
         rec_trans_np = rec_trans.detach().cpu().numpy().reshape(bs*n, 3)

@@ -108,7 +108,15 @@ vib_beta_target: 0.001
 vib_warmup_start: 20
 vib_warmup_end: 100
 vib_free_bits: 0.5
- 
+
+# ── Physics Smoother (gate-modulated per-joint EMA) ──
+phys_enabled: true
+phys_tau_base: 0.15
+phys_alpha: 1.0
+phys_lambda: 0.01
+phys_warmup_start: 30
+phys_warmup_end: 80
+
 rec_weight: 1
 grad_norm: 0.99
 epochs: 200
