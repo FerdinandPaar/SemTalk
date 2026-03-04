@@ -50,6 +50,7 @@ nohup.out
 outputs/
 datasets/
 models/
+!models/DEVELOPMENT_LOG.md
 weights/
 __pycache__/
 *.pyc
@@ -57,4 +58,5 @@ nohup.out
 outputs/
 datasets/
 models/
+!models/DEVELOPMENT_LOG.md
 weights/
