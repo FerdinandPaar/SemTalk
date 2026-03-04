@@ -22,7 +22,13 @@ cd /home/ferpaa/SemTalk
 SESSION="semtalk_train"
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
-if command -v tmux &>/dev/null; then
+# verify tmux actually works at runtime (conda tmux can fail due to libtinfo mismatch)
+TMUX_OK=false
+if command -v tmux &>/dev/null && tmux -V &>/dev/null 2>&1; then
+    TMUX_OK=true
+fi
+
+if $TMUX_OK; then
     # ── tmux branch ──
     if [ -z "$TMUX" ]; then
         if tmux has-session -t "$SESSION" 2>/dev/null; then
