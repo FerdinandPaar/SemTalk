@@ -4,10 +4,30 @@
 #
 #   ssh gridnode016
 #   bash run_train_moclip_4gpu.sh
+#
+# Automatically re-launches itself inside a tmux session so
+# training survives SSH disconnects.  Re-attach any time with:
+#   tmux attach -t semtalk_train
 # ============================================================
 
 set -e
 cd /home/ferpaa/SemTalk
+
+# ── tmux guard: if not already inside tmux, re-launch there ──────────
+SESSION="semtalk_train"
+if [ -z "$TMUX" ]; then
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "Session '$SESSION' already exists."
+        echo "Re-attaching — use Ctrl-B D to detach without killing it."
+        tmux attach -t "$SESSION"
+    else
+        echo "Launching inside tmux session '$SESSION'..."
+        echo "Re-attach any time with:  tmux attach -t $SESSION"
+        tmux new-session -s "$SESSION" "bash $(realpath "$0"); exec bash"
+    fi
+    exit 0
+fi
+# ── Everything below runs inside tmux ────────────────────────────────
 
 source /home/ferpaa/miniconda3/etc/profile.d/conda.sh
 conda activate semtalk
