@@ -5,29 +5,61 @@
 #   ssh gridnode016
 #   bash run_train_moclip_4gpu.sh
 #
-# Automatically re-launches itself inside a tmux session so
-# training survives SSH disconnects.  Re-attach any time with:
-#   tmux attach -t semtalk_train
+# Auto-launches inside tmux or screen so training survives
+# SSH disconnects.  Re-attach with:
+#   tmux attach -t semtalk_train     (if tmux is available)
+#   screen -r semtalk_train          (if only screen is available)
+#
+# NOTE: git on gridnode016 may fail due to old GLIBC.
+# Use conda's git to pull instead:
+#   conda run -n semtalk git pull origin feature/physics-smoother-svib
 # ============================================================
 
 set -e
 cd /home/ferpaa/SemTalk
 
-# ── tmux guard: if not already inside tmux, re-launch there ──────────
+# ── persistence guard: prefer tmux, fall back to screen ──────────────
 SESSION="semtalk_train"
-if [ -z "$TMUX" ]; then
-    if tmux has-session -t "$SESSION" 2>/dev/null; then
-        echo "Session '$SESSION' already exists."
-        echo "Re-attaching — use Ctrl-B D to detach without killing it."
-        tmux attach -t "$SESSION"
-    else
-        echo "Launching inside tmux session '$SESSION'..."
-        echo "Re-attach any time with:  tmux attach -t $SESSION"
-        tmux new-session -s "$SESSION" "bash $(realpath "$0"); exec bash"
+SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+
+if command -v tmux &>/dev/null; then
+    # ── tmux branch ──
+    if [ -z "$TMUX" ]; then
+        if tmux has-session -t "$SESSION" 2>/dev/null; then
+            echo "tmux session '$SESSION' already exists — re-attaching."
+            echo "Detach with Ctrl-B D."
+            tmux attach -t "$SESSION"
+        else
+            echo "Launching inside tmux session '$SESSION'..."
+            echo "Re-attach any time with:  tmux attach -t $SESSION"
+            tmux new-session -s "$SESSION" "bash \"$SCRIPT_PATH\"; exec bash"
+        fi
+        exit 0
     fi
-    exit 0
+    echo "Running inside tmux session: $(tmux display-message -p '#S')"
+
+elif command -v screen &>/dev/null; then
+    # ── screen branch ──
+    if [ -z "$STY" ]; then
+        if screen -ls "$SESSION" 2>/dev/null | grep -q "$SESSION"; then
+            echo "screen session '$SESSION' already exists — re-attaching."
+            echo "Detach with Ctrl-A D."
+            screen -r "$SESSION"
+        else
+            echo "Launching inside screen session '$SESSION'..."
+            echo "Re-attach any time with:  screen -r $SESSION"
+            screen -S "$SESSION" bash "$SCRIPT_PATH"
+        fi
+        exit 0
+    fi
+    echo "Running inside screen session: $STY"
+
+else
+    echo "WARNING: neither tmux nor screen found."
+    echo "Training will die if the SSH connection drops."
+    echo "Consider: conda install -c conda-forge tmux"
 fi
-# ── Everything below runs inside tmux ────────────────────────────────
+# ── Everything below runs inside the multiplexer (or bare if none) ───
 
 source /home/ferpaa/miniconda3/etc/profile.d/conda.sh
 conda activate semtalk
