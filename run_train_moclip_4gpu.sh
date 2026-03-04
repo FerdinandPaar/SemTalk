@@ -33,9 +33,10 @@ if [[ "$MODE_CHOICE" != "1" && "$MODE_CHOICE" != "2" ]]; then
 fi
 
 # --------------- Checkpoint resume -----------------------------------
-PREV_BEST="outputs/custom/0216_084918_semtalk_moclip_sparse/best_131.bin"
-RESUME_CKPT=${RESUME_CKPT:-"$PREV_BEST"}
-START_EPOCH=${START_EPOCH:-132}
+# Set RESUME_CKPT=path/to/ckpt.bin and START_EPOCH=N to resume from a checkpoint.
+# Leave unset (or set to "none") to start a fresh run.
+RESUME_CKPT=${RESUME_CKPT:-none}
+START_EPOCH=${START_EPOCH:-0}
 
 LOAD_CKPT_ARG=""
 START_EPOCH_ARG=""

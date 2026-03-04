@@ -1,11 +1,11 @@
 is_train: True
-ddp: False
-gpus: [0]
+ddp: True
+gpus: [0,1,2,3]
 stat: wandb 
 pre_frames: 4
 root_path: ./
 out_path: ./outputs/
-project: semtalk_moclip
+project: semtalk_svib_phys
 data_path: ./BEAT2/beat_english_v2.0.0/
 e_path:  weights/AESKConv_240_100.bin
 eval_model: motion_representation
@@ -95,7 +95,7 @@ speaker_f: 0
 batch_size: 64
 lr_base: 1e-4
 model: semtalk
-g_name: semtalk_sparse
+g_name: semtalk_svib_phys
 trainer: semtalk_sparse
 hidden_size: 768
 n_layer: 1
