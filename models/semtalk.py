@@ -1191,6 +1191,10 @@ class semtalk_sparse(nn.Module):
             "cls_hands":cls_hands,
             }
 
+# ── Named alias so configs can use g_name: semtalk_svib_phys ──────────────────
+semtalk_svib_phys = semtalk_sparse
+
+
 if __name__ == "__main__":
     from utils import config
     args = config.parse_args()
