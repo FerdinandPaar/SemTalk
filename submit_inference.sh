@@ -29,10 +29,8 @@ echo "--- Running inference ---"
   --config configs/semtalk_moclip_sparse.yaml \
   --load_ckpt outputs/custom/0305_073649_semtalk_moclip_sparse/best_116.bin \
   --inference \
-  --audio_infer_path demo/2_scott_0_1_1_test.wav
-
-echo "--- Renaming output ---"
-mv demo/2_scott_0_1_1_test.npz demo/2_scott_0_1_1_test_moclip_svib_phy_v1.npz
+  --audio_infer_path demo/2_scott_0_1_1_test.wav \
+  --out_name 2_scott_0_1_1_test_moclip_svib_phy_v1
 
 echo "=== Inference finished: $(date) ==="
 echo "Output: demo/2_scott_0_1_1_test_moclip_svib_phy_v1.npz"

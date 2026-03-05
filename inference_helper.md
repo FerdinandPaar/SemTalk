@@ -7,10 +7,15 @@
 
 ## 1. Quick-Start Command (Single GPU)
 
+> **Cluster note:** Run this **directly on `gridnode016`** (via `qrsh16`). `qsub` is only available on gridmaster; the compute node has no `qsub`. If you already have a shell on gridnode016, use `nohup` below.
+
+### Direct run on gridnode016 (recommended)
+
 ```bash
 cd /home/ferpaa/SemTalk
 
-CUDA_VISIBLE_DEVICES=0 PYTHONNOUSERSITE=1 \
+nohup bash -c '
+  PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=0 \
   /home/ferpaa/miniconda3/envs/semtalk/bin/python \
   -m torch.distributed.run \
   --nproc_per_node=1 \
@@ -19,43 +24,22 @@ CUDA_VISIBLE_DEVICES=0 PYTHONNOUSERSITE=1 \
   --config configs/semtalk_moclip_sparse.yaml \
   --load_ckpt outputs/custom/0305_073649_semtalk_moclip_sparse/best_116.bin \
   --inference \
-  --audio_infer_path demo/2_scott_0_1_1_test.wav
+  --audio_infer_path demo/2_scott_0_1_1_test.wav \
+  --out_name 2_scott_0_1_1_test_moclip_svib_phy_v1 && \
+  echo "DONE"
+' > /home/ferpaa/outputs/inference.log 2>&1 &
+
+echo "PID: $!"
+tail -f /home/ferpaa/outputs/inference.log
 ```
 
-After the run, rename the output:
+### Or in the foreground (interactive shell on gridnode016)
 
 ```bash
-mv demo/2_scott_0_1_1_test.npz demo/2_scott_0_1_1_test_moclip_svib_phy_v1.npz
-```
-
----
-
-## 2. Cluster (qsub) Inference Script
-
-The grid-cluster has no GPUs on the login node. Use `qsub`:  
-Save as `submit_inference.sh`:
-
-```bash
-#!/bin/bash
-#$ -N semtalk_infer
-#$ -q mld.q@gridnode016
-#$ -pe smp 1
-#$ -l gpu=1
-#$ -o /home/ferpaa/outputs/qsub_infer.log
-#$ -e /home/ferpaa/outputs/qsub_infer.log
-#$ -j y
-#$ -cwd
-
-echo "=== Inference started: $(date) ==="
-source /home/ferpaa/miniconda3/etc/profile.d/conda.sh
-conda activate semtalk
-
-export PYTHONNOUSERSITE=1
-export CUDA_VISIBLE_DEVICES=0
-
 cd /home/ferpaa/SemTalk
 
-/home/ferpaa/miniconda3/envs/semtalk/bin/python \
+PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES=0 \
+  /home/ferpaa/miniconda3/envs/semtalk/bin/python \
   -m torch.distributed.run \
   --nproc_per_node=1 \
   --master_port=29601 \
@@ -63,23 +47,38 @@ cd /home/ferpaa/SemTalk
   --config configs/semtalk_moclip_sparse.yaml \
   --load_ckpt outputs/custom/0305_073649_semtalk_moclip_sparse/best_116.bin \
   --inference \
-  --audio_infer_path demo/2_scott_0_1_1_test.wav
-
-mv demo/2_scott_0_1_1_test.npz demo/2_scott_0_1_1_test_moclip_svib_phy_v1.npz
-echo "=== Inference finished: $(date) ==="
-echo "Output: demo/2_scott_0_1_1_test_moclip_svib_phy_v1.npz"
+  --audio_infer_path demo/2_scott_0_1_1_test.wav \
+  --out_name 2_scott_0_1_1_test_moclip_svib_phy_v1
 ```
 
-Submit with:
+---
 
-```bash
-ssh gridmaster 'cd /home/ferpaa/SemTalk && qsub submit_inference.sh'
+## 2. Cluster Workflow
+
+```
+gridmaster  ──qrsh16──►  gridnode016  (has GPUs, no qsub)
+    │                         │
+  qsub                  run directly
+  (for training,            with nohup
+   long DDP jobs)           or foreground
 ```
 
-Monitor:
+> **Key rule:** `qsub` only works from **gridmaster** (login node). Once you're on **gridnode016** (via `qrsh16`), run commands directly — `qsub` is not available there.
+
+### Access gridnode016
 
 ```bash
-ssh gridmaster 'qstat -u ferpaa'
+# From your local machine or gridmaster:
+qrsh16   # alias for: qrsh -q mld.q@gridnode016 -l gpu=1 -pe smp 1
+```
+
+### qsub (from gridmaster only) — for unattended / training jobs
+
+```bash
+# On gridmaster:
+cd /home/ferpaa/SemTalk
+qsub submit_inference.sh
+qstat -u ferpaa
 tail -f /home/ferpaa/outputs/qsub_infer.log
 ```
 
@@ -93,6 +92,7 @@ tail -f /home/ferpaa/outputs/qsub_infer.log
 | `--load_ckpt` | — | Path to `.bin` checkpoint to load |
 | `--inference` | `False` | Flag: run `trainer.inference()` then exit (no training) |
 | `--audio_infer_path` | `demo/2_scott_0_1_1.wav` | Path to audio file (WAV, 16 kHz) |
+| `--out_name` | *(audio stem)* | Output NPZ filename stem (no ext needed). Saved to `demo/` unless a `/` is present. If omitted, derived from audio filename. |
 | `--test_state` | `False` | Flag: run `trainer.test()` for FGD evaluation then exit |
 
 ---

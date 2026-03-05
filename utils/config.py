@@ -28,6 +28,7 @@ def parse_args():
     parser = configargparse.ArgParser()
     parser.add("--inference", action="store_true", help="set this flag to inference")
     parser.add("--audio_infer_path", default="demo/2_scott_0_1_1.wav", type=str, help="path to the audio for inference")
+    parser.add("--out_name", default=None, type=str, help="output npz filename (stem or full path); if omitted, derived from audio_infer_path")
     parser.add("--test_state", action="store_true", help="set this flag to test weights")
     parser.add("--train_rvq", action="store_true", help="set this flag to train rvqvae")
     parser.add("--hubert_mean_path", default="weights/hubert_mean_2_scott.npy", type=str)

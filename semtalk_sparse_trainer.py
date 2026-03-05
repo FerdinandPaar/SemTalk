@@ -968,7 +968,7 @@ class CustomTrainer(train.BaseTrainer):
         return fid
 
     
-    def inference(self, audio_path):
+    def inference(self, audio_path, out_name=None):
         mode = 'inference'
         # test_seq_list = self.test_data.selected_file
         from utils import audio_to_frame_tokens
@@ -1245,11 +1245,17 @@ class CustomTrainer(train.BaseTrainer):
       
         rec_pose_np = rec_pose.detach().cpu().numpy()
         rec_trans_np = rec_trans.detach().cpu().numpy().reshape(bs*n, 3)
-        rec_exp_np = rec_exps.detach().cpu().numpy().reshape(bs*n, 100) 
-        base = os.path.basename(audio_path)
-        filename = os.path.splitext(base)[0]+".npz"
+        rec_exp_np = rec_exps.detach().cpu().numpy().reshape(bs*n, 100)
+        if out_name is not None:
+            # Use the caller-specified name; ensure .npz extension
+            stem = out_name if out_name.endswith(".npz") else out_name + ".npz"
+            # If stem is already a path (contains /), use as-is; otherwise put in ./demo/
+            save_path = stem if os.sep in stem or "/" in stem else os.path.join("./demo", stem)
+        else:
+            base = os.path.basename(audio_path)
+            filename = os.path.splitext(base)[0] + ".npz"
+            save_path = os.path.join("./demo", filename)
         gt_npz = np.load("demo/2_scott_0_1_1.npz", allow_pickle=True)
-        save_path = os.path.join("./demo", filename)
         np.savez(   save_path,
                     betas=gt_npz["betas"],
                     poses=rec_pose_np,

@@ -298,7 +298,7 @@ def main_worker(rank, world_size, args):
                 else:
                     logger.warning(f"Checkpoint {load_ckpt} does not exist. Starting training from scratch.")
                     raise FileNotFoundError(f"Checkpoint {load_ckpt} does not exist.")
-            trainer.inference(args.audio_infer_path)
+            trainer.inference(args.audio_infer_path, out_name=getattr(args, 'out_name', None))
         return
     if args.test_state:
         if rank == 0:
