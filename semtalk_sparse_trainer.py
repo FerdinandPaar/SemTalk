@@ -319,7 +319,7 @@ class CustomTrainer(train.BaseTrainer):
                 latent_upper_pred, latent_hands_pred, latent_lower_pred,
                 gate_psi_det, logvar_det,
             )
-            g_loss_final += phys_beta * phys_jerk
+            g_loss_final = g_loss_final + phys_beta * phys_jerk.squeeze()
             self.tracker.update_meter("phys_jerk", "train", phys_jerk.item())
             self.tracker.update_meter("phys_beta", "train", phys_beta)
        

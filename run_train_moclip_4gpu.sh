@@ -28,7 +28,7 @@ if command -v tmux &>/dev/null && tmux -V &>/dev/null 2>&1; then
     TMUX_OK=true
 fi
 
-if $TMUX_OK; then
+if false; then  # tmux disabled - libtinfo mismatch
     # ── tmux branch ──
     if [ -z "$TMUX" ]; then
         if tmux has-session -t "$SESSION" 2>/dev/null; then
@@ -134,13 +134,15 @@ if [ "$MODE_CHOICE" = "1" ]; then
 
     CUDA_LAUNCH_BLOCKING=0 \
     CUDA_VISIBLE_DEVICES=0 \
-    python train.py \
+    nohup /home/ferpaa/miniconda3/envs/semtalk/bin/python train.py \
         --config configs/semtalk_moclip_sparse.yaml \
         --ddp False \
         --gpus 0 \
         --notes "_1gpu" \
         $LOAD_CKPT_ARG \
-        $START_EPOCH_ARG
+        $START_EPOCH_ARG \
+        > outputs/train_nohup.log 2>&1 &
+    echo "Training PID: $! — tail -f outputs/train_nohup.log"
 
 else
 # ----------------------- 4-GPU DDP mode ------------------------------
@@ -163,8 +165,8 @@ else
 
     # torchrun (python -m torch.distributed.run) creates one subprocess per rank.
     # Non-rank-0 Python stdout+stderr is redirected to rank_N.log by train.py itself.
-    CUDA_LAUNCH_BLOCKING=1 \
-    CUDA_VISIBLE_DEVICES=$CUDA_MAP \
+    nohup \
+    env CUDA_LAUNCH_BLOCKING=1 CUDA_VISIBLE_DEVICES=$CUDA_MAP \
     /home/ferpaa/miniconda3/envs/semtalk/bin/python -m torch.distributed.run \
         --nproc_per_node=$NUM_GPUS \
         --master_addr=$MASTER_ADDR \
@@ -175,8 +177,12 @@ else
         --gpus $GPU_IDS \
         --notes "_4gpu" \
         $LOAD_CKPT_ARG \
-        $START_EPOCH_ARG
+        $START_EPOCH_ARG \
+        > outputs/train_nohup.log 2>&1 &
+    echo "Training PID: $! — tail -f outputs/train_nohup.log"
 fi
 
 echo ""
-echo "=== Training complete ==="
+echo "=== Training launched in background (nohup) ==="
+echo "Monitor:  tail -f outputs/train_nohup.log"
+echo "Kill all: pkill -f train.py"
