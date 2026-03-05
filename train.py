@@ -362,6 +362,23 @@ def main_worker(rank, world_size, args):
         if args.ddp:
             dist.barrier()
 
+    # ── wandb: training completed normally ─────────────────────────────────
+    if rank == 0 and args.stat == "wandb":
+        import wandb as _wandb
+        best_fid = getattr(trainer, "best_fid", None)
+        fid_str = f"Best FGD : {best_fid:.4f}" if best_fid is not None else "Best FGD : n/a"
+        _wandb.alert(
+            title="Training Complete \u2705",
+            text=(
+                f"Run    : {args.name}{args.notes}\n"
+                f"Epochs : {start_epoch} \u2192 {args.epochs}\n"
+                f"{fid_str}\n"
+                f"Node   : {__import__('socket').gethostname()}"
+            ),
+            level=_wandb.AlertLevel.INFO,
+        )
+        _wandb.finish()
+
     # if rank == 0:
     #     for k, v in trainer.tracker.values.items():
     #         if trainer.tracker.loss_meters[k]['val'].count > 0:
@@ -381,20 +398,42 @@ if __name__ == "__main__":
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
     os.environ.setdefault("MASTER_PORT", "8680")
     args = config.parse_args()
+
+    def _run(rank, world_size, args):
+        """Thin wrapper: catches crashes and fires wandb.alert before re-raising."""
+        import socket
+        try:
+            main_worker(rank, world_size, args)
+        except Exception as _exc:
+            if rank == 0 and getattr(args, "stat", "") == "wandb":
+                import wandb as _wandb
+                _wandb.alert(
+                    title="Training CRASHED \u274c",
+                    text=(
+                        f"Run  : {args.name}{getattr(args,'notes','')}\n"
+                        f"Error: {type(_exc).__name__}: {_exc}\n"
+                        f"Node : {socket.gethostname()}\n"
+                        f"Ckpt : {getattr(args, 'load_ckpt', 'none')}"
+                    ),
+                    level=_wandb.AlertLevel.ERROR,
+                )
+                _wandb.finish(exit_code=1)
+            raise
+
     if args.ddp:
         # ── torchrun mode: LOCAL_RANK is set as an env var ──
         # torchrun creates one process per rank; we run main_worker directly.
         if "LOCAL_RANK" in os.environ:
             rank       = int(os.environ["LOCAL_RANK"])
             world_size = int(os.environ.get("WORLD_SIZE", len(args.gpus)))
-            main_worker(rank, world_size, args)
+            _run(rank, world_size, args)
         else:
             # ── legacy mp.spawn fallback ──
             mp.set_start_method("spawn", force=True)
             mp.spawn(
-                main_worker,
+                _run,
                 args=(len(args.gpus), args,),
                 nprocs=len(args.gpus),
             )
     else:
-        main_worker(0, 1, args)
+        _run(0, 1, args)
