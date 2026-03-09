@@ -5,6 +5,7 @@ import csv
 import sys
 import warnings
 import random
+from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -26,7 +27,7 @@ import librosa
 import pickle
 import clip
 from src.utils.moclip_utils import load_tmr_text_encoder, load_moclip_text_encoder
-from models.physics_smoother import PhysicsSmootherSMPLX
+from models.physics_smoother import PhysicsSmootherSMPLX, UPPER_JOINT_IDX, HANDS_JOINT_IDX, LOWER_JOINT_IDX
 
 # ── Flow-Matching base model (optional) ──
 try:
@@ -153,13 +154,15 @@ class CustomTrainer(train.BaseTrainer):
         if self._phys_enabled:
             self.physics_smoother = PhysicsSmootherSMPLX(
                 num_joints=self.joints,
-                tau_base=getattr(args, 'phys_tau_base', 0.15),
+                tau_base=getattr(args, 'phys_tau_base', 0.50),
+                tau_floor=getattr(args, 'phys_tau_floor', 0.10),
                 alpha=getattr(args, 'phys_alpha', 1.0),
                 pose_fps=self.args.pose_fps,
             ).to(self.rank)
             logger.info(
                 f"[sparse_trainer] PhysicsSmootherSMPLX enabled  "
                 f"(τ_base={self.physics_smoother.tau_base}, "
+                f"τ_floor={self.physics_smoother.tau_floor}, "
                 f"α={self.physics_smoother.alpha}, "
                 f"λ={self._phys_lambda})"
             )
@@ -300,26 +303,74 @@ class CustomTrainer(train.BaseTrainer):
         self.tracker.update_meter("latent", "train", loss_latent.item())
         g_loss_final += loss_latent/6
 
-        # ── Physics jerk loss on VQ latents ──
+        # ── Physics jerk loss on decoded rot6d poses (P2) ──
+        # Gradient path: sparse_model → upper_latent → frozen_VQ_decoder → decoded_rot6d → jerk_loss
+        # Frozen decoder params are not updated, but ∂loss/∂upper_latent flows correctly.
         phys_beta = self._compute_phys_beta(epoch)
         if self._phys_enabled and phys_beta > 0:
-            # Extract 0th-level latent predictions  [B, T', C]
-            latent_upper_pred = net_out_val["rec_upper"][:, 0, 0]
-            latent_hands_pred = net_out_val["rec_hands"][:, 0, 0]
-            latent_lower_pred = net_out_val["rec_lower"][:, 0, 0]
+            # 0th-level continuous latent predictions from sparse model  [B, T', C_latent]
+            upper_lat = net_out_val["rec_upper"][:, 0, 0]   # [B, T', C]
+            hands_lat = net_out_val["rec_hands"][:, 0, 0]   # [B, T', C]
+            lower_lat = net_out_val["rec_lower"][:, 0, 0]   # [B, T', C]
 
-            # Gate ψ — detached so physics loss does NOT push gate toward semantic
-            gate_psi_det = gate_class_pred_val[:, :, 1:2].detach()   # [B, T', 1]
-            logvar_det = (
-                net_out_val["gate_logvar"].detach()
-                if self._vib_enabled else None
-            )
+            # Decode through frozen VQ decoders — gradient flows to upper/hands/lower_lat
+            # Decoder.forward() takes [B, C, T'] channels-first, then internally does
+            # x.permute(0,2,1), so it already returns [B, T_dec, pose_dim] — no extra permute needed.
+            dec_upper = self.vq_model_upper.decoder(upper_lat.permute(0,2,1))  # [B, T_dec, 78]
+            dec_hands = self.vq_model_hands.decoder(hands_lat.permute(0,2,1))  # [B, T_dec, 180]
+            dec_lower = self.vq_model_lower.decoder(lower_lat.permute(0,2,1))  # [B, T_dec, 61]
 
-            phys_jerk = self.physics_smoother.compute_latent_jerk_loss(
-                latent_upper_pred, latent_hands_pred, latent_lower_pred,
-                gate_psi_det, logvar_det,
+            B_d, T_dec, _ = dec_upper.shape
+
+            # Determine joint counts from decoder output dynamically and validate
+            pose_dim_upper = dec_upper.shape[2]
+            if pose_dim_upper % 6 != 0:
+                logger.error("upper decoder output dim %d not divisible by 6", pose_dim_upper)
+                raise RuntimeError(f"upper decoder output dim {pose_dim_upper} not divisible by 6")
+            n_joints_upper = pose_dim_upper // 6
+            dec_upper_6d = dec_upper.reshape(B_d, T_dec, n_joints_upper, 6)
+
+            pose_dim_hands = dec_hands.shape[2]
+            if pose_dim_hands % 6 != 0:
+                logger.error("hands decoder output dim %d not divisible by 6", pose_dim_hands)
+                raise RuntimeError(f"hands decoder output dim {pose_dim_hands} not divisible by 6")
+            n_joints_hands = pose_dim_hands // 6
+            dec_hands_6d = dec_hands.reshape(B_d, T_dec, n_joints_hands, 6)
+
+            # Lower decoder includes extra translation/contact dims (61 total); take exactly
+            # len(LOWER_JOINT_IDX) full 6d joints (= 9 × 6 = 54 dims), matching tau_lower.
+            n_joints_lower = len(LOWER_JOINT_IDX)   # 9
+            dec_lower_6d = dec_lower[:, :, :(n_joints_lower * 6)].reshape(B_d, T_dec, n_joints_lower, 6)
+
+            # Gate ψ — detached so physics loss does NOT pull gate toward semantic
+            gate_psi_det = gate_class_pred_val[:, :, 1:2].detach()           # [B, T', 1]
+            logvar_det = net_out_val["gate_logvar"].detach() if self._vib_enabled else None
+
+            # τ for all 55 joints at T' resolution  →  [B, T', 55]
+            tau_all = self.physics_smoother.compute_tau(gate_psi_det, logvar_det)
+
+            # Select per-part τ and upsample from T' → T_dec via nearest-neighbour
+            tau_upper_tp = tau_all[:, :, UPPER_JOINT_IDX]  # [B, T', 13]
+            tau_hands_tp = tau_all[:, :, HANDS_JOINT_IDX]  # [B, T', 30]
+            tau_lower_tp = tau_all[:, :, LOWER_JOINT_IDX]  # [B, T', 9]
+
+            if T_dec != tau_all.shape[1]:
+                # F.interpolate expects [B, C, T]; we have [B, T', J]
+                tau_upper = torch.nn.functional.interpolate(
+                    tau_upper_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 13]
+                tau_hands = torch.nn.functional.interpolate(
+                    tau_hands_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 30]
+                tau_lower = torch.nn.functional.interpolate(
+                    tau_lower_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 9]
+            else:
+                tau_upper, tau_hands, tau_lower = tau_upper_tp, tau_hands_tp, tau_lower_tp
+
+            phys_jerk = (
+                self.physics_smoother.compute_pose_jerk_loss(dec_upper_6d, tau_upper)
+                + self.physics_smoother.compute_pose_jerk_loss(dec_hands_6d, tau_hands)
+                + self.physics_smoother.compute_pose_jerk_loss(dec_lower_6d, tau_lower)
             )
-            g_loss_final = g_loss_final + phys_beta * phys_jerk.squeeze()
+            g_loss_final = g_loss_final + phys_beta * phys_jerk
             self.tracker.update_meter("phys_jerk", "train", phys_jerk.item())
             self.tracker.update_meter("phys_beta", "train", phys_beta)
        
@@ -1246,14 +1297,21 @@ class CustomTrainer(train.BaseTrainer):
         rec_pose_np = rec_pose.detach().cpu().numpy()
         rec_trans_np = rec_trans.detach().cpu().numpy().reshape(bs*n, 3)
         rec_exp_np = rec_exps.detach().cpu().numpy().reshape(bs*n, 100)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if out_name is not None:
-            # Use the caller-specified name; ensure .npz extension
-            stem = out_name if out_name.endswith(".npz") else out_name + ".npz"
-            # If stem is already a path (contains /), use as-is; otherwise put in ./demo/
-            save_path = stem if os.sep in stem or "/" in stem else os.path.join("./demo", stem)
+            # Use caller-specified name but always append timestamp to avoid overwrite.
+            out_dir, out_file = os.path.split(out_name)
+            base_name, ext = os.path.splitext(out_file)
+            if ext == "":
+                ext = ".npz"
+            stamped_name = f"{base_name}_{timestamp}{ext}"
+            if out_dir:
+                save_path = os.path.join(out_dir, stamped_name)
+            else:
+                save_path = os.path.join("./demo", stamped_name)
         else:
             base = os.path.basename(audio_path)
-            filename = os.path.splitext(base)[0] + ".npz"
+            filename = os.path.splitext(base)[0] + f"_{timestamp}.npz"
             save_path = os.path.join("./demo", filename)
         gt_npz = np.load("demo/2_scott_0_1_1.npz", allow_pickle=True)
         np.savez(   save_path,

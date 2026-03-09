@@ -332,7 +332,8 @@ def parse_args():
 
     # Physics Smoother (gate-modulated per-joint EMA)
     parser.add("--phys_enabled", default=True, type=str2bool)
-    parser.add("--phys_tau_base", default=0.15, type=float)
+    parser.add("--phys_tau_base", default=0.50, type=float)
+    parser.add("--phys_tau_floor", default=0.10, type=float)
     parser.add("--phys_alpha", default=1.0, type=float)
     parser.add("--phys_lambda", default=0.01, type=float)
     parser.add("--phys_warmup_start", default=30, type=int)

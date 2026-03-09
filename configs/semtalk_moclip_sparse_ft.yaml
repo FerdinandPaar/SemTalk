@@ -5,7 +5,7 @@ stat: wandb
 pre_frames: 4
 root_path: ./
 out_path: ./outputs/
-project: semtalk_svib_phys
+project: semtalk_svib_phys_ft
 data_path: ./BEAT2/beat_english_v2.0.0/
 e_path:  weights/AESKConv_240_100.bin
 eval_model: motion_representation
@@ -20,22 +20,24 @@ vae_layer: 4
 vae_grow: [1,1,2,1]
 variational: False
 
-# ckpt — start from scratch (no sparse ckpt yet for moclip)
-load_ckpt: None
+# ── Fine-tuning: resume from best S-VIB + physics checkpoint ──
+# start_epoch tells the training loop to begin at epoch 116 so all warmup
+# schedules (VIB β, phys β) report correct values from the start of fine-tuning.
+load_ckpt: ./outputs/custom/0305_073649_semtalk_moclip_sparse/best_116.bin
 base_ckpt: ./weights/best_semtalk_base.bin
+start_epoch: 116
+epochs: 220
 
-# Flow-Matching toggle (set true + fm_base_ckpt to use FM base instead of semtalk_base)
+# Flow-Matching toggle
 use_flow_matching: false
 
 # -------- TMR / MoCLIP-specific --------
-# semantic_encoder: 'tmr' triggers the TMR code path; 'clip' keeps vanilla CLIP
 semantic_encoder: tmr
 moclip_ckpt: ./weights/moclip_checkpoints/models/tmr_humanml3d_guoh3dfeats/last_weights/text_encoder.pt
 distilbert_path: distilbert-base-uncased
-# Output dim of the text encoder (256 for TMR, 512 for CLIP ViT-B/32)
 clip_dim: 256
 
-# data config — point to the MoCLIP-encoded cache
+# data config — same cache as training run
 training_speakers: [2] 
 additional_data: False
 cache_path: datasets/beat2_cache_2
@@ -93,34 +95,39 @@ speaker_f: 0
 
 # model config
 batch_size: 64
-lr_base: 1e-4
+lr_base: 5e-5      # half the original lr for fine-tuning
 model: semtalk
 g_name: semtalk_svib_phys
 trainer: semtalk_sparse
 hidden_size: 768
 n_layer: 1
 
-# ── S-VIB (Semantic Variational Information Bottleneck) ──
+# ── S-VIB (P3): stronger β forces harder gate commitment ──
+# β=0.010: now same order of magnitude as cross-entropy gate loss (0.3–0.8 nats)
+# free_bits=0.20: tighter floor so KL contributes sooner
+# warmup_end=120: slower ramp at higher β to avoid gate collapse around epoch 116
 vib_enabled: true
 vib_z_dim: 16
 vib_timing_dim: 64
-vib_beta_target: 0.001
+vib_beta_target: 0.010
 vib_warmup_start: 20
-vib_warmup_end: 100
-vib_free_bits: 0.5
+vib_warmup_end: 120
+vib_free_bits: 0.20
 
-# ── Physics Smoother (gate-modulated per-joint EMA) ──
+# ── Physics Smoother (P1 + P2): sqrt τ + pose-level jerk loss ──
+# phys_tau_base=0.50, phys_tau_floor=0.10: from P1 (already in base config)
+# phys_lambda=0.08: increased because decoded-pose jerk values are smaller
+# in absolute scale than latent jerk values (P2 calibration)
 phys_enabled: true
 phys_tau_base: 0.50
 phys_tau_floor: 0.10
 phys_alpha: 1.0
-phys_lambda: 0.01
+phys_lambda: 0.08
 phys_warmup_start: 30
 phys_warmup_end: 80
 
 rec_weight: 1
 grad_norm: 0.99
-epochs: 200
 test_period: 5
 log_period: 10
 decay_epochs: 999

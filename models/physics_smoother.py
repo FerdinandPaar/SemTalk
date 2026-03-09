@@ -3,14 +3,23 @@ PhysicsSmootherSMPLX — Gate-modulated per-joint physics smoothing for SemTalk.
 
 Design principle (from S-VIB gate-as-muscle-force analogy):
 
-    τ_j  =  τ_base  ·  m_j  ·  (1 − ψ)  ·  (1 + α · σ²)
+    τ_j  =  τ_base  ·  max( sqrt(m_j / m_max), τ_floor )  ·  (1 − ψ)  ·  (1 + α · σ²)
 
 Where:
-    τ_j     : per-joint smoothing coefficient
-    τ_base  : base smoothing strength (hyperparameter, e.g. 0.15)
-    m_j     : normalised mass fraction for joint j (De Leva 1996)
-    ψ       : S-VIB gate activation  (1 = semantic,  0 = beat)
-    σ²      : VIB posterior variance  (uncertainty)
+    τ_j      : per-joint smoothing coefficient
+    τ_base   : base smoothing strength (hyperparameter, default 0.50)
+    m_j      : normalised mass fraction for joint j (De Leva 1996)
+    τ_floor  : minimum shape factor (default 0.10) — prevents fingers from
+               getting zero smoothing; justified by the empirical finding that
+               fingers peak at 0.51 Hz (dragged appendages), not 1.14 Hz
+               (free pendulums)
+    ψ        : S-VIB gate activation  (1 = semantic,  0 = beat)
+    σ²       : VIB posterior variance  (uncertainty)
+
+The previous formula (τ_base × m_j) used *linear* mass scaling which collapsed
+τ to near-zero for arms (0.009), wrists (0.002), and fingers (0.0001). The
+sqrt compression reduces the 4-decade mass range to 2 decades, and the floor
+ensures no joint is left unsmoothed.
 
 Interpretation:
     ψ ≈ 1  (semantic gesture) → τ_j → 0  →  trust the prediction  (muscle-driven)
@@ -78,6 +87,11 @@ _UPPER_JOINT_IDX = [3, 6, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]  # 13 joint
 _HANDS_JOINT_IDX = list(range(25, 55))                                   # 30 joints
 _LOWER_JOINT_IDX = [0, 1, 2, 3, 4, 5, 6, 7, 8]                         #  9 joints
 
+# Public aliases for use by trainer and eval code
+UPPER_JOINT_IDX = _UPPER_JOINT_IDX
+HANDS_JOINT_IDX = _HANDS_JOINT_IDX
+LOWER_JOINT_IDX = _LOWER_JOINT_IDX
+
 
 class PhysicsSmootherSMPLX(nn.Module):
     """
@@ -91,13 +105,15 @@ class PhysicsSmootherSMPLX(nn.Module):
     def __init__(
         self,
         num_joints: int = 55,
-        tau_base: float = 0.15,
+        tau_base: float = 0.50,
+        tau_floor: float = 0.10,
         alpha: float = 1.0,
         pose_fps: int = 30,
     ):
         super().__init__()
         self.num_joints = num_joints
         self.tau_base = tau_base
+        self.tau_floor = tau_floor
         self.alpha = alpha
         self.pose_fps = pose_fps
 
@@ -107,6 +123,13 @@ class PhysicsSmootherSMPLX(nn.Module):
         )
         raw = raw / raw.max()
         self.register_buffer("mass_fractions", raw)  # [J]
+
+        # Sqrt-compressed shape factors with floor clamp.
+        # sqrt reduces the 4-decade mass range to 2 decades;
+        # floor ensures fingers (m_j ≈ 0.002) still get τ ≥ τ_base × τ_floor.
+        shape = torch.sqrt(raw)                        # sqrt(m_j / m_max) since raw is already normalised to max=1
+        shape = torch.clamp(shape, min=tau_floor)      # [J]
+        self.register_buffer("mass_shape", shape)      # [J]  — used by compute_tau
 
         # Pre-compute body-part average masses for latent-space jerk loss
         self.register_buffer(
@@ -123,8 +146,13 @@ class PhysicsSmootherSMPLX(nn.Module):
 
     def compute_tau(self, gate_psi, logvar=None):
         """
-        Per-joint smoothing coefficient:
-            τ_j = τ_base · m_j · (1 − ψ) · (1 + α · σ²)
+        Per-joint smoothing coefficient (sqrt-compressed + floor):
+
+            shape_j = max( sqrt(m_j / m_max), τ_floor )
+            τ_j     = τ_base · shape_j · (1 − ψ) · (1 + α · σ²)
+
+        The sqrt compression and floor clamp are precomputed in __init__
+        and stored as ``self.mass_shape``  [J].
 
         Args:
             gate_psi:  [B, T', 1]  semantic gate probability
@@ -133,8 +161,8 @@ class PhysicsSmootherSMPLX(nn.Module):
         Returns:
             tau:       [B, T', J]
         """
-        m_j = self.mass_fractions[None, None, :]          # [1, 1, J]
-        tau = self.tau_base * m_j * (1.0 - gate_psi)      # [B, T', J]
+        shape = self.mass_shape[None, None, :]             # [1, 1, J]
+        tau = self.tau_base * shape * (1.0 - gate_psi)     # [B, T', J]
 
         if logvar is not None:
             sigma_sq = logvar.exp().mean(dim=-1, keepdim=True)  # [B, T', 1]
