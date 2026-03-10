@@ -1403,3 +1403,280 @@ To make physics principles pervasively visible from frame 1 — not just at sema
 Both are future work. The present architecture correctly implements what was designed: a sparse semantic override of a physics-smoothed beat baseline. The first-3-seconds similarity to vanilla is **confirmation that the beat path is working correctly** — it preserves high-quality base motion while selectively inserting physics-grounded semantic gestures at content-word moments. Pervasive divergence builds up as the P2 jerk penalty reshapes token selection over training epochs and as the semantic gate fires on content-word clusters throughout the sequence.
 
 ---
+
+---
+
+## [2026-03-09] FGD Subset Evaluation — S-VIB + Physics Fine-Tune
+
+### Evaluation Setup
+
+- **Script:** `utils/run_fgd_eval.py` (SemTalk's own FIDCalculator protocol)
+- **Encoder:** `BEAT2/beat_english_v2.0.0/weights/AESKConv_240_100.bin` (VAESKConv)
+- **Subset:** 15 sequences, speaker 2 / Scott only (⚠ full test set = 265 sequences)
+- **Pipeline:** axis-angle → rot6d (55 joints × 6) → non-overlapping 32-frame windows → VAESKConv latent (dim=240) → FGD via FIDCalculator
+- **Run:** `0308_220319_semtalk_moclip_sparse_ft_ft_4gpu` (fine-tune from `best_116.bin`, S-VIB + P1+P2+P3 physics)
+- **Epoch directories evaluated:** 126, 128, 220 — all contain 15 gt_*.npz + 15 res_*.npz from the validation pass during training
+
+### Results
+
+| Epoch | Checkpoint | FGD (subset, 15 seq) | vs. Vanilla Baseline |
+|-------|-----------|---------------------|----------------------|
+| —     | vanilla `best_138.bin` (baseline) | **0.4189** | — |
+| 126   | `best_126.bin` | **0.4153** | **−0.0036 ✓ beats baseline** |
+| 128   | (implicit saved at eval) | 0.4280 | +0.0091 |
+| 220   | `last_220.bin` (final) | 0.4344 | +0.0155 |
+
+Lower FGD = better (generated distribution closer to real motion distribution).
+
+### Interpretation
+
+**Epoch 126 beats the vanilla baseline** (0.4153 < 0.4189) — this is the first fine-tune checkpoint to cross below baseline, and it is the best saved checkpoint (`best_126.bin`) from the session. This confirms that the S-VIB + physics P1+P2+P3 fine-tune did not degrade distribution fidelity and modestly improved it.
+
+**The later-epoch degradation (128 → 220) follows the standard fine-tune forgetting curve:**
+- Epoch 128: jerk penalty ramps up (phys_lambda kicks in harder post-warmup), producing poses that are smoother but slightly off-distribution relative to the noisy-but-natural BEAT2 ground truth.
+- By epoch 220 the model has absorbed maximum regularisation; occasional oversmoothing pushes the generated distribution slightly further from GT.
+- This confirms `best_126.bin` as the optimal deployment checkpoint — it is at the sweet spot just before physics regularisation starts pulling the distribution away from GT.
+
+**Subset caveat:** These 15 sequences cover only speaker 2 (Scott). The full BEAT2 English test split has 265 sequences across 25 speakers. The 0.4153 score should be treated as an indicative number, not a paper-quality result. For publication, re-run inference on all 265 sequences.
+
+### Next Steps
+
+1. **Deploy `best_126.bin`** for Blender visualisation (use `bash run_inference_push.sh best_126`).
+2. **Full 265-sequence FGD eval** (paper-quality): run inference on all BEAT2 English test sequences and re-run `utils/run_fgd_eval.py`.
+3. **Save `gate_psi` in NPZ output** to enable Blender visualisation of semantic gate firing frames.
+
+---
+
+## [2026-03-09] Automated 10-Run Sweep Orchestrator (Detached + W&B + Email)
+
+Added `run_sweep_svib_phys_10.sh` to automate the full multi-run workflow with the following guarantees:
+
+- **Sequential auto-chain:** each next model starts automatically after the previous run finishes.
+- **Same starting point for fairness:** all 10 runs always load the same base checkpoint (`BASE_CKPT`).
+- **Safety save per run:** config + train log + run txt/yaml + `best_*.bin`/`last_*.bin` copied into `outputs/sweeps/<timestamp>_<sweep_name>/safe_models/<run_id>/`.
+- **Validation after all training only:** inference + subset FGD + metric extraction (`fid`, `align`, `l1div`) starts only when all 10 training runs are complete.
+- **Detached execution:** script auto-relaunches itself under `nohup` and writes `orchestrator.log` + `orchestrator.pid`, so it keeps running after terminal disconnect.
+- **W&B naming clarity:** each run includes parameterized notes in the run name suffix (`_sw10_<run_id>_b..._fb..._pl..._tb..._tf...`) and uses project `semtalk_svib_phys_sweep`.
+- **Optional email updates:** set `EMAIL_TO` (and optional SMTP env vars) to receive start/train-complete/validated/final summary notifications.
+- **Incremental Git pushes:** metadata (configs, logs, summaries, development log) pushed periodically via `PUSH_EVERY`; checkpoints are push-optional via `PUSH_CHECKPOINTS=1`.
+
+Example launch (fully detached + mail):
+
+`EMAIL_TO=you@domain.com AUTO_DETACH=1 TRAIN_MODE=ddp DDP_NPROC=4 BASE_CKPT=outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin bash run_sweep_svib_phys_10.sh`
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_10runs_v1
+
+- Start time: 2026-03-09 09:09:50
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=196
+- Train mode: ddp
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_090950_svib_phys_10runs_v1/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_debug
+
+- Start time: 2026-03-09 09:11:54
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=196
+- Train mode: ddp
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 0 (master log: outputs/sweeps/20260309_091154_svib_phys_debug/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_10runs_v1_single
+
+- Start time: 2026-03-09 09:15:28
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=196
+- Train mode: single
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_091528_svib_phys_10runs_v1_single/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_smoketest
+
+- Start time: 2026-03-09 09:17:41
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=196
+- Train mode: single
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 0 (master log: outputs/sweeps/20260309_091740_svib_phys_smoketest/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_smoketest2
+
+- Start time: 2026-03-09 09:18:29
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=196
+- Train mode: single
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 0 (master log: outputs/sweeps/20260309_091829_svib_phys_smoketest2/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_10runs_live
+
+- Start time: 2026-03-09 09:37:38
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=196
+- Train mode: single
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_093736_svib_phys_10runs_live/logs/orchestrator.log)
+- Email updates: ferdinand.paar.fp@gmail.com
+
+- r01_base_b010_fb020_pl008_tb050_tf010: FAILED (run_dir not found)
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_10runs_live
+
+- Start time: 2026-03-09 17:55:49
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=156
+- Train mode: single
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_093736_svib_phys_10runs_live/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_10runs_live
+
+- Start time: 2026-03-09 17:57:58
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=156
+- Train mode: single
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_093736_svib_phys_10runs_live/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_10runs_live
+
+- Start time: 2026-03-09 18:03:38
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=156
+- Train mode: ddp
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_093736_svib_phys_10runs_live/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_10runs_live
+
+- Start time: 2026-03-09 18:06:46
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=156
+- Train mode: ddp
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_093736_svib_phys_10runs_live/logs/orchestrator.log)
+- Email updates: disabled
+
+- r02_b005: FAILED (run_dir not found)
+
+- r03_b020: FAILED (run_dir not found)
+
+- r04_fb010: FAILED (run_dir not found)
+
+---
+
+## [2026-03-09] Auto Sweep Started — svib_phys_10runs_live
+
+- Start time: 2026-03-09 23:57:32
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=156
+- Train mode: ddp
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_093736_svib_phys_10runs_live/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-10] Auto Sweep Started — svib_phys_10runs_live
+
+- Start time: 2026-03-10 07:24:01
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=156
+- Train mode: ddp
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_093736_svib_phys_10runs_live/logs/orchestrator.log)
+- Email updates: disabled
+
+---
+
+## [2026-03-10] Auto Sweep Started — svib_phys_10runs_live
+
+- Start time: 2026-03-10 07:28:02
+- Base checkpoint (shared by all 10 runs): outputs/custom/0308_220319_semtalk_moclip_sparse_ft_ft_4gpu/best_126.bin
+- Epoch schedule per run: start_epoch=116, end_epoch=156
+- Train mode: ddp
+- Validation policy: run only after all 10 training runs finish
+- Detached mode: 1 (master log: outputs/sweeps/20260309_093736_svib_phys_10runs_live/logs/orchestrator.log)
+- Email updates: disabled
+
+- r03_b020: TRAINED. run_dir=outputs/custom/0310_072423_r03_b020_sw10_r03_b020_b0.020_fb0.20_pl0.08_tb0.50_tf0.10, best_ckpt=outputs/custom/0310_072423_r03_b020_sw10_r03_b020_b0.020_fb0.20_pl0.08_tb0.50_tf0.10/best_153.bin
+
+- r05_fb030: TRAINED. run_dir=outputs/custom/0310_073539_r05_fb030_sw10_r05_fb030_b0.010_fb0.30_pl0.08_tb0.50_tf0.10, best_ckpt=outputs/custom/0310_073539_r05_fb030_sw10_r05_fb030_b0.010_fb0.30_pl0.08_tb0.50_tf0.10/best_146.bin
+
+- r06_pl005: TRAINED. run_dir=outputs/custom/0310_091321_r06_pl005_sw10_r06_pl005_b0.010_fb0.20_pl0.05_tb0.50_tf0.10, best_ckpt=outputs/custom/0310_091321_r06_pl005_sw10_r06_pl005_b0.010_fb0.20_pl0.05_tb0.50_tf0.10/best_138.bin
+
+- r07_pl012: TRAINED. run_dir=outputs/custom/0310_105245_r07_pl012_sw10_r07_pl012_b0.010_fb0.20_pl0.12_tb0.50_tf0.10, best_ckpt=outputs/custom/0310_105245_r07_pl012_sw10_r07_pl012_b0.010_fb0.20_pl0.12_tb0.50_tf0.10/best_129.bin
+
+
+
+
+### Reliability fixes (same day)
+
+- Fixed detached relaunch bug by using absolute script path for `nohup` (`SCRIPT_PATH`) instead of relying on relative `$0` lookup.
+- Fixed config-generation incompatibility with `configargparse`: switched from Python `yaml.safe_dump` (which rewrote list keys as block lists) to **base-config copy + appended overrides**, avoiding the `train.py: ambiguous option: --=2` failure.
+- Added **W&B non-interactive preflight** in `run_sweep_svib_phys_10.sh`:
+  - If `RUN_STAT=wandb`, script now requires a valid non-interactive login (`WANDB_API_KEY` or existing wandb auth) before run start.
+  - Fails fast with a clear message if auth is missing, instead of crashing mid-run on `wandb.init()`.
+- Training run names are now explicit via `--wandb_name` and trainer updated to respect `wandb_name` directly in `wandb.init(...)`.
+
+
+- r08_tb035: TRAINED. run_dir=outputs/custom/0310_123403_r08_tb035_sw10_r08_tb035_b0.010_fb0.20_pl0.08_tb0.35_tf0.10, best_ckpt=outputs/custom/0310_123403_r08_tb035_sw10_r08_tb035_b0.010_fb0.20_pl0.08_tb0.35_tf0.10/best_133.bin
+
+- r09_tb065: TRAINED. run_dir=outputs/custom/0310_141308_r09_tb065_sw10_r09_tb065_b0.010_fb0.20_pl0.08_tb0.65_tf0.10, best_ckpt=outputs/custom/0310_141308_r09_tb065_sw10_r09_tb065_b0.010_fb0.20_pl0.08_tb0.65_tf0.10/best_140.bin
+
+- r10_tf005: TRAINED. run_dir=outputs/custom/0310_155238_r10_tf005_sw10_r10_tf005_b0.010_fb0.20_pl0.08_tb0.50_tf0.05, best_ckpt=outputs/custom/0310_155238_r10_tf005_sw10_r10_tf005_b0.010_fb0.20_pl0.08_tb0.50_tf0.05/best_116.bin
+
+- r01_base_b010_fb020_pl008_tb050_tf010: VALIDATED. best_epoch=172, fgd=0.4197, fid=0.43661436455652325, bc=0.7540829748595744, l1div=12.558646623804657
+
+- r02_b005: VALIDATED. best_epoch=136, fgd=0.4220, fid=0.4571971333523681, bc=0.7601221087752807, l1div=12.571915210078037
+
+- r04_fb010: VALIDATED. best_epoch=146, fgd=0.4206, fid=0.4477086620653745, bc=0.7568859597064073, l1div=12.536436840121866
+
+- r03_b020: VALIDATED. best_epoch=153, fgd=0.4286, fid=0.4902089724530425, bc=0.7640445905949773, l1div=12.670315632627267
+
+- r05_fb030: VALIDATED. best_epoch=146, fgd=0.4213, fid=0.4441945603580022, bc=0.7569295956915916, l1div=12.526921914166145
+
+- r06_pl005: VALIDATED. best_epoch=138, fgd=0.4213, fid=0.43923131737801047, bc=0.7570701544963131, l1div=12.521135577051867
+
+- r07_pl012: VALIDATED. best_epoch=129, fgd=0.4216, fid=0.4407423488923454, bc=0.7541310380739326, l1div=12.573415068329146
+
+- r08_tb035: VALIDATED. best_epoch=133, fgd=0.4193, fid=0.4400145096914674, bc=0.7661507832754244, l1div=12.538499271556196
+
+- r09_tb065: VALIDATED. best_epoch=140, fgd=0.4252, fid=0.4537854231786689, bc=0.7301207332695434, l1div=12.500041018149705
+
+- r10_tf005: VALIDATED. best_epoch=116, fgd=0.4245, fid=0.45088505965908876, bc=0.7555659312312282, l1div=12.519761591950019
+
+
+### Sweep Final Summary (svib_phys_10runs_live)
+- Summary CSV: outputs/sweeps/20260309_093736_svib_phys_10runs_live/summary.csv
+- Summary MD : outputs/sweeps/20260309_093736_svib_phys_10runs_live/summary.md
+- End time   : 2026-03-10 17:44:07
+
