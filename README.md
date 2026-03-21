@@ -1,3 +1,4 @@
+<img width="1085" height="739" alt="image" src="https://github.com/user-attachments/assets/dd538821-49ea-4438-8868-183c7db1376f" />
 # physics-neuro-gesture-gen: Sparse Motion Generation with S-VIB and Physics-Aware Smoothing
 
 **Version:** 2026.03.12  
