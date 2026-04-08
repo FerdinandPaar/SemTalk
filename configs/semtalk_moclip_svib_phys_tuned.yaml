@@ -1,0 +1,164 @@
+## Experiment C — S-VIB + Physics with TUNED hyperparameters
+## Key fixes vs original:
+##   vib_beta_target: 0.001 → 0.5   (KL now ~8% of total loss vs 0.016%)
+##   phys_lambda:     0.01  → 1.0   (jerk now ~6% of total loss vs 0.06%)
+##   gate_class_weight: 9.0          (compensates 10:1 non-sem:sem imbalance)
+##   vib_warmup_start: 20 → 5        (VIB engages early, not after model has converged)
+##   phys_warmup_start: 30 → 5       (physics engages early too)
+## Hypothesis: with these corrections, VIB bottleneck + physics jerk loss are
+## visible to the optimizer and can produce measurable FGD improvement.
+is_train: True
+ddp: True
+gpus: [0]
+stat: wandb
+pre_frames: 4
+root_path: ./
+out_path: ./outputs/
+project: semtalk_fair_eval
+data_path: ./BEAT2/beat_english_v2.0.0/
+e_path:  weights/AESKConv_240_100.bin
+eval_model: motion_representation
+e_name: VAESKConv
+data_path_1: ./BEAT2/pretrained/
+vae_test_len: 32
+vae_test_dim: 330
+vae_test_stride: 20
+vae_length: 240
+vae_codebook_size: 256
+vae_layer: 4
+vae_grow: [1,1,2,1]
+variational: False
+
+# ckpt — resume from converged MoCLIP linear-gate checkpoint
+load_ckpt: ./outputs/custom/0223_224354_semtalk_moclip_sparse_1gpu/best_190.bin
+base_ckpt: ./weights/best_semtalk_base.bin
+
+use_flow_matching: false
+
+# -------- TMR / MoCLIP-specific --------
+semantic_encoder: tmr
+moclip_ckpt: ./weights/moclip_checkpoints/models/tmr_humanml3d_guoh3dfeats/last_weights/text_encoder.pt
+distilbert_path: distilbert-base-uncased
+clip_dim: 256
+
+# data config
+training_speakers: [2]
+additional_data: False
+cache_path: datasets/beat2_cache_2
+dataset: semtalk_dataloader
+train_path: datasets/beat2_semtalk_train_moclip
+test_path: datasets/beat2_semtalk_test_moclip.pkl
+new_cache: False
+
+# motion config
+ori_joints: beat_smplx_joints
+tar_joints: beat_smplx_full
+pose_rep: smplxflame_30
+pose_norm: False
+pose_fps: 30
+rot6d: True
+pre_frames: 4
+pose_dims: 330
+pose_length: 64
+stride: 20
+test_length: 64
+motion_f: 256
+m_pre_encoder: null
+m_encoder: null
+m_fix_pre: False
+
+# audio config
+audio_rep: onset+amplitude
+audio_sr: 16000
+audio_fps: 16000
+audio_norm: False
+audio_f: 256
+
+# text config
+word_rep: textgrid
+word_index_num: 11195
+word_dims: 300
+freeze_wordembed: False
+word_f: 256
+t_pre_encoder: fasttext
+t_encoder: null
+t_fix_pre: False
+
+# facial config
+facial_rep: smplxflame_30
+facial_dims: 100
+facial_norm: False
+facial_f: 0
+f_pre_encoder: null
+f_encoder: null
+f_fix_pre: False
+
+# speaker config
+id_rep: onehot
+speaker_f: 0
+
+# model config
+batch_size: 64
+lr_base: 1e-4
+model: semtalk
+g_name: semtalk_svib_phys
+trainer: semtalk_sparse
+hidden_size: 768
+n_layer: 1
+
+# ── S-VIB ON — beta TUNED so KL ≈ 8% of total loss ──
+vib_enabled: true
+vib_z_dim: 16
+vib_beta_target: 0.5       # was 0.001 — now KL contributes ~0.25 vs total ~3.0
+vib_warmup_start: 5        # was 20 — engage before convergence
+vib_warmup_end: 40         # was 100
+vib_free_bits: 0.5
+
+# ── Gate class imbalance fix: weight class-1 (semantic) ──
+# Training data: ~10.3% semantic frames → weight 1:(9) corrects imbalance
+gate_class_weight: 9.0
+
+# ── Contrastive margin loss OFF (isolate VIB+physics contribution) ──
+contrast_enabled: false
+
+# ── Base-to-sparse latent bridge ──
+latent_bridge_enabled: true
+latent_bridge_alpha: 0.45
+
+# ── Weight-informed embedding ──
+mass_cond_mode: none
+mass_cond_scale: 0.30
+base_mass_cond_mode: none
+base_mass_cond_scale: 0.30
+joint_train_base_in_sparse: false
+
+# ── Dual-stage semantic conditioning ──
+dual_stage_cond_enabled: true
+early_cond_scale: 0.20
+mid_cond_scale: 0.15
+
+# ── Physics: training jerk loss ON with TUNED lambda ──
+phys_enabled: true
+phys_train_enabled: true
+phys_tau_base: 0.50
+phys_tau_floor: 0.10
+phys_alpha: 1.0
+phys_lambda: 1.0           # was 0.01 — now jerk contributes ~0.18 vs total ~3.0
+phys_warmup_start: 5       # was 30 — engage early
+phys_warmup_end: 30        # was 80
+
+rec_weight: 1
+grad_norm: 0.99
+epochs: 40
+test_period: 5
+log_period: 10
+decay_epochs: 999
+
+ll: 3
+lf: 3
+lu: 3
+lh: 3
+cl: 1
+cf: 1
+cu: 1
+ch: 1

@@ -159,7 +159,13 @@ class CustomTrainer(train.BaseTrainer):
         self.rec_loss = get_loss_func("GeodesicLoss").to(self.rank) 
         self.log_softmax = nn.LogSoftmax(dim=2).to(self.rank)
         self.reclatent_loss_test = nn.MSELoss().to(self.rank)
-        self.gate_fuc = nn.CrossEntropyLoss().to(self.rank)
+        # Gate CE loss — optionally class-weighted to counter 10:1 non-sem:sem imbalance
+        gate_class_weight = getattr(args, 'gate_class_weight', 1.0)
+        if gate_class_weight != 1.0:
+            w = torch.tensor([1.0, float(gate_class_weight)]).to(self.rank)
+            self.gate_fuc = nn.CrossEntropyLoss(weight=w).to(self.rank)
+        else:
+            self.gate_fuc = nn.CrossEntropyLoss().to(self.rank)
 
         # ── S-VIB KL hyper-parameters ──
         self._vib_enabled = getattr(args, 'vib_enabled', True)
