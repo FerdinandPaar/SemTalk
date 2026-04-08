@@ -353,8 +353,17 @@ def parse_args():
     parser.add("--vib_warmup_end", default=100, type=int)
     parser.add("--vib_free_bits", default=0.5, type=float)
 
+    # Gate class imbalance weight (sem=1 class weight; 1.0 = unweighted)
+    parser.add("--gate_class_weight", default=1.0, type=float)
+
+    # Contrastive margin loss (push sparse != base on semantic frames)
+    parser.add("--contrast_enabled", default=False, type=str2bool)
+    parser.add("--contrast_weight", default=0.1, type=float)
+    parser.add("--contrast_margin", default=0.5, type=float)
+
     # Physics Smoother (gate-modulated per-joint EMA)
     parser.add("--phys_enabled", default=True, type=str2bool)
+    parser.add("--phys_train_enabled", default=True, type=str2bool)
     parser.add("--phys_tau_base", default=0.50, type=float)
     parser.add("--phys_tau_floor", default=0.10, type=float)
     parser.add("--phys_alpha", default=1.0, type=float)
