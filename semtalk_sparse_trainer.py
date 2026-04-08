@@ -168,8 +168,14 @@ class CustomTrainer(train.BaseTrainer):
         self._vib_warmup_end   = getattr(args, 'vib_warmup_end',   100)
         self._vib_free_bits    = getattr(args, 'vib_free_bits',     0.5)
 
+        # ── Contrastive margin loss ──
+        self._contrast_enabled = getattr(args, 'contrast_enabled', False)
+        self._contrast_weight  = getattr(args, 'contrast_weight', 0.1)
+        self._contrast_margin  = getattr(args, 'contrast_margin', 0.5)
+
         # ── Physics Smoother (gate-modulated per-joint EMA) ──
         self._phys_enabled = getattr(args, 'phys_enabled', True)
+        self._phys_train_enabled = getattr(args, 'phys_train_enabled', True)
         self._phys_lambda       = getattr(args, 'phys_lambda',       0.01)
         self._phys_warmup_start = getattr(args, 'phys_warmup_start', 30)
         self._phys_warmup_end   = getattr(args, 'phys_warmup_end',   80)
@@ -325,11 +331,36 @@ class CustomTrainer(train.BaseTrainer):
         self.tracker.update_meter("latent", "train", loss_latent.item())
         g_loss_final += loss_latent/6
 
+        # ── Contrastive margin loss: push sparse ≠ base on semantic frames ──
+        if self._contrast_enabled:
+            # Sparse 0th-level continuous latents  [B, T', C]
+            sp_upper = net_out_val["rec_upper"][:, 0, 0]
+            sp_hands = net_out_val["rec_hands"][:, 0, 0]
+            sp_lower = net_out_val["rec_lower"][:, 0, 0]
+            # Base latents (detached — we don't back-prop into the frozen base model)
+            ba_upper = latent_val['upper_latent'].detach()
+            ba_hands = latent_val['hands_latent'].detach()
+            ba_lower = latent_val['lower_latent'].detach()
+            # Per-timestep L2 distance between sparse and base
+            delta = (
+                (sp_upper - ba_upper).pow(2).mean(dim=-1)
+                + (sp_hands - ba_hands).pow(2).mean(dim=-1)
+                + (sp_lower - ba_lower).pow(2).mean(dim=-1)
+            ) / 3.0  # [B, T']
+            sem_t = (sem_mean > 0).float()  # [B, T']
+            margin = self._contrast_margin
+            loss_contrast = (
+                sem_t * torch.relu(margin - delta)       # semantic: push apart
+                + (1.0 - sem_t) * delta                  # non-semantic: stay close
+            ).mean()
+            g_loss_final = g_loss_final + self._contrast_weight * loss_contrast
+            self.tracker.update_meter("contrast", "train", loss_contrast.item())
+
         # ── Physics jerk loss on decoded rot6d poses (P2) ──
         # Gradient path: sparse_model → upper_latent → frozen_VQ_decoder → decoded_rot6d → jerk_loss
         # Frozen decoder params are not updated, but ∂loss/∂upper_latent flows correctly.
         phys_beta = self._compute_phys_beta(epoch)
-        if self._phys_enabled and phys_beta > 0:
+        if self._phys_enabled and self._phys_train_enabled and phys_beta > 0:
             # 0th-level continuous latent predictions from sparse model  [B, T', C_latent]
             upper_lat = net_out_val["rec_upper"][:, 0, 0]   # [B, T', C]
             hands_lat = net_out_val["rec_hands"][:, 0, 0]   # [B, T', C]
