@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import librosa.display
 from matplotlib.pyplot import figure
 import math
-from scipy.signal import argrelextrema
+from scipy.signal import argrelextrema, hilbert
 
 
 class L1div(object):
@@ -240,3 +240,447 @@ class alignment(object):
         avg_dis_all_b2a = sum(avg_dis_all_b2a_list)/len(avg_dis_all_b2a_list) #max(avg_dis_all_b2a_list)
         #print(avg_dis_all_b2a, sum(avg_dis_all_b2a_list)/47)
         return avg_dis_all_b2a  
+
+
+class CoupledSwingAnalyzer(object):
+    """
+    Coupled limb-dynamics analysis utilities for SMPL-X joint trajectories.
+
+    Expected joints input shape: [T, J, 3] in world coordinates.
+    """
+
+    def __init__(self, fps=30, joint_map=None):
+        self.fps = float(fps)
+        self.dt = 1.0 / max(self.fps, 1.0)
+        self.joint_map = joint_map or {
+            "pelvis": 0,
+            "neck": 12,
+            "l_shoulder": 16,
+            "r_shoulder": 17,
+            "l_elbow": 18,
+            "r_elbow": 19,
+            "l_wrist": 20,
+            "r_wrist": 21,
+        }
+
+    @staticmethod
+    def _safe_norm(x, axis=-1, keepdims=False, eps=1e-8):
+        n = np.linalg.norm(x, axis=axis, keepdims=keepdims)
+        if np.isscalar(n):
+            return max(n, eps)
+        return np.maximum(n, eps)
+
+    @staticmethod
+    def _normalize(x, axis=-1, eps=1e-8):
+        return x / CoupledSwingAnalyzer._safe_norm(x, axis=axis, keepdims=True, eps=eps)
+
+    @staticmethod
+    def _moving_average(x, win):
+        win = int(max(1, win))
+        if win <= 1:
+            return x.copy()
+        kernel = np.ones(win, dtype=np.float64) / float(win)
+        return np.convolve(x, kernel, mode="same")
+
+    @staticmethod
+    def _mutual_information_1d(x, y, bins=16):
+        x = np.asarray(x).reshape(-1)
+        y = np.asarray(y).reshape(-1)
+        n = min(len(x), len(y))
+        if n < 4:
+            return 0.0
+        x = x[:n]
+        y = y[:n]
+        c_xy, _, _ = np.histogram2d(x, y, bins=bins)
+        p_xy = c_xy / max(np.sum(c_xy), 1.0)
+        p_x = np.sum(p_xy, axis=1, keepdims=True)
+        p_y = np.sum(p_xy, axis=0, keepdims=True)
+        denom = np.maximum(p_x @ p_y, 1e-12)
+        nz = p_xy > 0
+        mi = np.sum(p_xy[nz] * np.log(np.maximum(p_xy[nz], 1e-12) / denom[nz]))
+        return float(mi)
+
+    @staticmethod
+    def _r2(y_true, y_pred):
+        y_true = np.asarray(y_true).reshape(-1)
+        y_pred = np.asarray(y_pred).reshape(-1)
+        n = min(len(y_true), len(y_pred))
+        if n < 2:
+            return 0.0
+        y_true = y_true[:n]
+        y_pred = y_pred[:n]
+        ss_res = float(np.sum((y_true - y_pred) ** 2))
+        ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
+        if ss_tot <= 1e-12:
+            return 0.0
+        return 1.0 - ss_res / ss_tot
+
+    @staticmethod
+    def _fit_linear(X, y):
+        X = np.asarray(X, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64).reshape(-1)
+        if X.ndim == 1:
+            X = X[:, None]
+        Xb = np.concatenate([X, np.ones((X.shape[0], 1), dtype=np.float64)], axis=1)
+        w, _, _, _ = np.linalg.lstsq(Xb, y, rcond=None)
+        y_hat = Xb @ w
+        return w, y_hat
+
+    def _local_frames(self, joints):
+        joints = np.asarray(joints)
+        pelvis = joints[:, self.joint_map["pelvis"]]
+        neck = joints[:, self.joint_map["neck"]]
+        l_sh = joints[:, self.joint_map["l_shoulder"]]
+        r_sh = joints[:, self.joint_map["r_shoulder"]]
+
+        x_axis = self._normalize(r_sh - l_sh)
+        y_axis = self._normalize(neck - pelvis)
+        z_axis = self._normalize(np.cross(x_axis, y_axis))
+        y_axis = self._normalize(np.cross(z_axis, x_axis))
+        return np.stack([x_axis, y_axis, z_axis], axis=-1)  # [T,3,3]
+
+    def _segment_dir_local(self, joints, parent_idx, child_idx):
+        joints = np.asarray(joints)
+        R = self._local_frames(joints)
+        seg = joints[:, child_idx] - joints[:, parent_idx]
+        seg = self._normalize(seg)
+        # world -> local (R columns are local axes in world coords)
+        seg_local = np.einsum("tij,tj->ti", np.transpose(R, (0, 2, 1)), seg)
+        return self._normalize(seg_local)
+
+    def segment_omega_local(self, joints, parent_idx, child_idx):
+        d = self._segment_dir_local(joints, parent_idx, child_idx)
+        if d.shape[0] < 2:
+            return np.zeros((d.shape[0], 3), dtype=np.float64)
+        omega = np.cross(d[:-1], d[1:]) / self.dt
+        omega = np.concatenate([omega[:1], omega], axis=0)
+        return omega
+
+    def segment_angular_velocity_coherence(self, joints, side="right", max_lag_s=0.6):
+        if side == "right":
+            sh, el, wr = self.joint_map["r_shoulder"], self.joint_map["r_elbow"], self.joint_map["r_wrist"]
+        else:
+            sh, el, wr = self.joint_map["l_shoulder"], self.joint_map["l_elbow"], self.joint_map["l_wrist"]
+
+        omg_upper = self.segment_omega_local(joints, sh, el)
+        omg_fore = self.segment_omega_local(joints, el, wr)
+        upper_mag = np.linalg.norm(omg_upper, axis=-1)
+        fore_mag = np.linalg.norm(omg_fore, axis=-1)
+
+        plv, lag_frames, lag_sec, lag_corr = self.phase_locking_and_lag(
+            upper_mag, fore_mag, max_lag_s=max_lag_s
+        )
+        return {
+            "plv": plv,
+            "lead_lag_frames": lag_frames,
+            "lead_lag_seconds": lag_sec,
+            "lead_lag_corr": lag_corr,
+            "upper_omega": upper_mag,
+            "forearm_omega": fore_mag,
+        }
+
+    def phase_locking_and_lag(self, x, y, max_lag_s=0.6):
+        x = np.asarray(x).reshape(-1)
+        y = np.asarray(y).reshape(-1)
+        n = min(len(x), len(y))
+        if n < 8:
+            return 0.0, 0, 0.0, 0.0
+        x = x[:n] - np.mean(x[:n])
+        y = y[:n] - np.mean(y[:n])
+
+        phx = np.angle(hilbert(x))
+        phy = np.angle(hilbert(y))
+        plv = float(np.abs(np.mean(np.exp(1j * (phx - phy)))))
+
+        max_lag = int(max(1, round(max_lag_s * self.fps)))
+        xc = np.correlate(x, y, mode="full")
+        lags = np.arange(-n + 1, n)
+        mask = (lags >= -max_lag) & (lags <= max_lag)
+        xc_sub = xc[mask]
+        lags_sub = lags[mask]
+        best = int(np.argmax(xc_sub))
+        lag_frames = int(lags_sub[best])
+        lag_sec = float(lag_frames * self.dt)
+        denom = self._safe_norm(x) * self._safe_norm(y)
+        lag_corr = float(xc_sub[best] / max(denom, 1e-12))
+        return plv, lag_frames, lag_sec, lag_corr
+
+    def _segment_angle_series(self, joints, parent_idx, child_idx):
+        d_local = self._segment_dir_local(joints, parent_idx, child_idx)
+        # angle to local +Y axis
+        y_axis = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        cosv = np.clip(np.sum(d_local * y_axis[None, :], axis=-1), -1.0, 1.0)
+        return np.arccos(cosv)
+
+    def coupled_oscillator_fit(self, joints, side="right"):
+        if side == "right":
+            sh, el, wr = self.joint_map["r_shoulder"], self.joint_map["r_elbow"], self.joint_map["r_wrist"]
+        else:
+            sh, el, wr = self.joint_map["l_shoulder"], self.joint_map["l_elbow"], self.joint_map["l_wrist"]
+
+        x1 = self._segment_angle_series(joints, sh, el)
+        x2 = self._segment_angle_series(joints, el, wr)
+        if len(x1) < 8:
+            return {
+                "r2_upper": 0.0,
+                "r2_forearm": 0.0,
+                "k_upper_to_forearm": 0.0,
+                "k_forearm_to_upper": 0.0,
+                "coupling_asymmetry": 0.0,
+            }
+
+        dx1 = np.gradient(x1, self.dt)
+        dx2 = np.gradient(x2, self.dt)
+        ddx1 = np.gradient(dx1, self.dt)
+        ddx2 = np.gradient(dx2, self.dt)
+
+        X1 = np.stack([dx1, x1, (x1 - x2)], axis=1)
+        y1 = -ddx1
+        w1, y1_hat = self._fit_linear(X1, y1)
+
+        X2 = np.stack([dx2, x2, (x2 - x1)], axis=1)
+        y2 = -ddx2
+        w2, y2_hat = self._fit_linear(X2, y2)
+
+        k12 = float(w1[2])
+        k21 = float(w2[2])
+        return {
+            "r2_upper": self._r2(y1, y1_hat),
+            "r2_forearm": self._r2(y2, y2_hat),
+            "k_upper_to_forearm": k12,
+            "k_forearm_to_upper": k21,
+            "coupling_asymmetry": float(abs(k12 - k21)),
+        }
+
+    def cross_frequency_coupling(self, joints, side="right", lf_window=21, hf_window=5):
+        if side == "right":
+            sh, el, wr = self.joint_map["r_shoulder"], self.joint_map["r_elbow"], self.joint_map["r_wrist"]
+        else:
+            sh, el, wr = self.joint_map["l_shoulder"], self.joint_map["l_elbow"], self.joint_map["l_wrist"]
+
+        shoulder = np.linalg.norm(self.segment_omega_local(joints, sh, el), axis=-1)
+        forearm = np.linalg.norm(self.segment_omega_local(joints, el, wr), axis=-1)
+
+        lf_shoulder = self._moving_average(shoulder, lf_window)
+        hf_forearm = forearm - self._moving_average(forearm, hf_window)
+        hf_env = np.abs(hilbert(hf_forearm))
+
+        n = min(len(lf_shoulder), len(hf_env))
+        if n < 8:
+            return {
+                "corr": 0.0,
+                "mutual_info": 0.0,
+            }
+        x = lf_shoulder[:n]
+        y = hf_env[:n]
+        if np.std(x) < 1e-9 or np.std(y) < 1e-9:
+            corr = 0.0
+        else:
+            corr = float(np.corrcoef(x, y)[0, 1])
+        return {
+            "corr": corr,
+            "mutual_info": self._mutual_information_1d(x, y, bins=16),
+        }
+
+    def extract_predictor_signals(self, joints, side="right"):
+        if side == "right":
+            sh, el, wr = self.joint_map["r_shoulder"], self.joint_map["r_elbow"], self.joint_map["r_wrist"]
+        else:
+            sh, el, wr = self.joint_map["l_shoulder"], self.joint_map["l_elbow"], self.joint_map["l_wrist"]
+        pelvis = self.joint_map["pelvis"]
+        neck = self.joint_map["neck"]
+
+        shoulder = np.linalg.norm(self.segment_omega_local(joints, sh, el), axis=-1)
+        forearm = np.linalg.norm(self.segment_omega_local(joints, el, wr), axis=-1)
+        torso = np.linalg.norm(self.segment_omega_local(joints, pelvis, neck), axis=-1)
+        hand = forearm.copy()
+        return {
+            "shoulder": shoulder,
+            "forearm": forearm,
+            "torso": torso,
+            "hand": hand,
+        }
+
+    @staticmethod
+    def _make_lag_features(signals_dict, keys, max_lag):
+        arrays = [np.asarray(signals_dict[k]).reshape(-1) for k in keys if k in signals_dict and signals_dict[k] is not None]
+        if len(arrays) == 0:
+            return None, None
+        n = min([len(a) for a in arrays])
+        if n <= max_lag + 2:
+            return None, None
+        feats = []
+        for k in keys:
+            if k not in signals_dict or signals_dict[k] is None:
+                continue
+            s = np.asarray(signals_dict[k]).reshape(-1)[:n]
+            for lag in range(max_lag + 1):
+                feats.append(s[max_lag - lag:n - lag])
+        X = np.stack(feats, axis=1)
+        y = np.asarray(signals_dict["hand"]).reshape(-1)[:n][max_lag:]
+        return X, y
+
+    def predictor_analysis(self, samples, max_lag=4):
+        """
+        samples: list of dicts with keys:
+            speaker_id, shoulder, forearm, torso, hand, optional audio, optional gate
+        """
+        groups = {}
+        for s in samples:
+            sid = s.get("speaker_id", -1)
+            groups.setdefault(sid, []).append(s)
+
+        model_defs = {
+            "shoulder_only": ["shoulder"],
+            "forearm_only": ["forearm"],
+            "shoulder_forearm_torso": ["shoulder", "forearm", "torso"],
+            "plus_audio_gate": ["shoulder", "forearm", "torso", "audio", "gate"],
+        }
+
+        out = {}
+        for model_name, keys in model_defs.items():
+            fold_r2 = []
+            fold_mi = []
+            for sid in groups.keys():
+                train = []
+                test = []
+                for sid2, seqs in groups.items():
+                    if sid2 == sid:
+                        test.extend(seqs)
+                    else:
+                        train.extend(seqs)
+
+                Xtr_list, ytr_list = [], []
+                Xte_list, yte_list = [], []
+
+                for seq in train:
+                    X, y = self._make_lag_features(seq, keys, max_lag)
+                    if X is not None:
+                        Xtr_list.append(X)
+                        ytr_list.append(y)
+                for seq in test:
+                    X, y = self._make_lag_features(seq, keys, max_lag)
+                    if X is not None:
+                        Xte_list.append(X)
+                        yte_list.append(y)
+
+                if len(Xtr_list) == 0 or len(Xte_list) == 0:
+                    continue
+
+                Xtr = np.concatenate(Xtr_list, axis=0)
+                ytr = np.concatenate(ytr_list, axis=0)
+                Xte = np.concatenate(Xte_list, axis=0)
+                yte = np.concatenate(yte_list, axis=0)
+
+                w, _ = self._fit_linear(Xtr, ytr)
+                Xteb = np.concatenate([Xte, np.ones((Xte.shape[0], 1), dtype=np.float64)], axis=1)
+                yhat = Xteb @ w
+                fold_r2.append(self._r2(yte, yhat))
+
+                # MI proxy between aggregated predictor and target
+                mi_proxy = self._mutual_information_1d(np.mean(Xte, axis=1), yte, bins=16)
+                fold_mi.append(mi_proxy)
+
+            out[model_name] = {
+                "mean_r2": float(np.mean(fold_r2)) if len(fold_r2) > 0 else 0.0,
+                "mean_mutual_info": float(np.mean(fold_mi)) if len(fold_mi) > 0 else 0.0,
+                "num_folds": int(len(fold_r2)),
+            }
+
+        base_r2 = out.get("shoulder_only", {}).get("mean_r2", 0.0)
+        for model_name in out.keys():
+            out[model_name]["delta_r2_vs_shoulder"] = float(out[model_name]["mean_r2"] - base_r2)
+        return out
+
+    def audio_conditioned_causality(self, samples, max_lag=8):
+        """
+        Granger-style test with lagged linear models:
+            restricted: hand ~ lag(shoulder, forearm)
+            full:       hand ~ lag(audio, shoulder, forearm)
+        """
+        Xr_list, Xf_list, y_list = [], [], []
+        for s in samples:
+            if s.get("audio", None) is None:
+                continue
+            base = {
+                "shoulder": s.get("shoulder", None),
+                "forearm": s.get("forearm", None),
+                "hand": s.get("hand", None),
+            }
+            full = {
+                "audio": s.get("audio", None),
+                "shoulder": s.get("shoulder", None),
+                "forearm": s.get("forearm", None),
+                "hand": s.get("hand", None),
+            }
+            Xr, y = self._make_lag_features(base, ["shoulder", "forearm"], max_lag)
+            Xf, y2 = self._make_lag_features(full, ["audio", "shoulder", "forearm"], max_lag)
+            if Xr is None or Xf is None:
+                continue
+            n = min(len(y), len(y2), Xr.shape[0], Xf.shape[0])
+            Xr_list.append(Xr[:n])
+            Xf_list.append(Xf[:n])
+            y_list.append(y[:n])
+
+        if len(Xr_list) == 0:
+            return {
+                "delta_r2_audio": 0.0,
+                "f_stat": 0.0,
+                "top_audio_lag_frames": 0,
+                "top_audio_lag_seconds": 0.0,
+            }
+
+        Xr = np.concatenate(Xr_list, axis=0)
+        Xf = np.concatenate(Xf_list, axis=0)
+        y = np.concatenate(y_list, axis=0)
+
+        wr, yhat_r = self._fit_linear(Xr, y)
+        wf, yhat_f = self._fit_linear(Xf, y)
+
+        r2_r = self._r2(y, yhat_r)
+        r2_f = self._r2(y, yhat_f)
+        delta_r2 = float(r2_f - r2_r)
+
+        rss_r = float(np.sum((y - yhat_r) ** 2))
+        rss_f = float(np.sum((y - yhat_f) ** 2))
+        df1 = max(Xf.shape[1] - Xr.shape[1], 1)
+        df2 = max(len(y) - Xf.shape[1] - 1, 1)
+        f_stat = float(((rss_r - rss_f) / df1) / max(rss_f / df2, 1e-12))
+
+        # Audio-lag attribution from full model coefficients.
+        # First (max_lag+1) columns correspond to audio lags.
+        audio_coef = np.abs(wf[:(max_lag + 1)])
+        top_lag = int(np.argmax(audio_coef))
+        return {
+            "delta_r2_audio": delta_r2,
+            "f_stat": f_stat,
+            "top_audio_lag_frames": top_lag,
+            "top_audio_lag_seconds": float(top_lag * self.dt),
+        }
+
+    def side_report(self, joints, side="right"):
+        coh = self.segment_angular_velocity_coherence(joints, side=side)
+        osc = self.coupled_oscillator_fit(joints, side=side)
+        cfc = self.cross_frequency_coupling(joints, side=side)
+        return {
+            "coherence": {
+                "plv": coh["plv"],
+                "lead_lag_frames": coh["lead_lag_frames"],
+                "lead_lag_seconds": coh["lead_lag_seconds"],
+                "lead_lag_corr": coh["lead_lag_corr"],
+            },
+            "oscillator": osc,
+            "cross_frequency": cfc,
+        }
+
+    def bilateral_oscillator_asymmetry(self, joints):
+        left = self.coupled_oscillator_fit(joints, side="left")
+        right = self.coupled_oscillator_fit(joints, side="right")
+        return {
+            "left": left,
+            "right": right,
+            "k12_asymmetry_lr": float(abs(left["k_upper_to_forearm"] - right["k_upper_to_forearm"])),
+            "k21_asymmetry_lr": float(abs(left["k_forearm_to_upper"] - right["k_forearm_to_upper"])),
+            "r2_gap_upper": float(abs(left["r2_upper"] - right["r2_upper"])),
+            "r2_gap_forearm": float(abs(left["r2_forearm"] - right["r2_forearm"])),
+        }

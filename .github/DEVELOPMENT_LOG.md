@@ -1,3 +1,209 @@
+Timestamp: 2026-04-02
+
+## Base Weight-Prior Architecture Update (Audio-Decoupled, Stage-1)
+
+### Decision
+- Keep the stable audio pathway unchanged.
+- Remove base mass-prior injection from `in_audio_body`.
+- Inject mass prior later at decoder-latent stage (`motion_refined_embeddings`) with a learned scalar gate.
+
+### Why this design
+- Main risk in the old approach: adding mass prior directly into audio embeddings can distort learned audio-rhythm alignment.
+- New design minimizes this risk by applying conditioning after audio-word fusion and self-attention, where motion-specific shaping is more appropriate.
+- Gate starts near off (`sigmoid(-4) ≈ 0.018`) so training can ignore prior if harmful.
+
+### Implementation details
+- `models/semtalk.py` (`semtalk_base`):
+  - Added `base_mass_cond_gate` (learned scalar) with default init `-4.0`.
+  - Added `base_mass_cond_hidden_proj` to map mass features to hidden size (`768`) independently from `audio_feature2motion`.
+  - Added `_apply_base_mass_prior(hidden_seq)` and applied it in both:
+    - `forward()` after `word_hints` fusion
+    - `forward_latent()` after `word_hints` fusion
+  - No remaining `in_audio_body = in_audio_body + ...` mass injection.
+
+- `utils/config.py`:
+  - Added `--base_mass_cond_gate_init` (default `-4.0`).
+
+- `configs/semtalk_base.yaml`:
+  - Added defaults:
+    - `base_mass_cond_mode: none`
+    - `base_mass_cond_scale: 0.30`
+    - `base_mass_cond_gate_init: -4.0`
+
+- `utils/other_tools.py`:
+  - Updated checkpoint loading to align `module.` prefix automatically.
+  - Added guarded non-strict fallback that only allows missing `base_mass_cond_*` keys.
+
+- `semtalk_base_trainer.py`:
+  - Added `base_mass_gate` metric logging.
+  - Logs effective gate as `0.0` when `base_mass_cond_mode=none`.
+
+### Training runs (Stage-1, 1 epoch, stable-start A/B)
+- Gated decoder prior ON:
+  - run: `outputs/custom/0402_214207_semtalk_base_base_gate_stage1_ft_stable_v2`
+  - start: `weights/best_semtalk_base.bin`
+  - mode: `base_mass_cond_mode=arm_combined_core`
+  - result: `fid=0.4474`, `align=0.7592`, `l1div=13.1473`
+
+- Matched control (prior OFF):
+  - run: `outputs/custom/0402_220017_semtalk_base_base_nomass_ft_stable_v2`
+  - start: `weights/best_semtalk_base.bin`
+  - mode: `base_mass_cond_mode=none`
+  - result: `fid=0.4845`, `align=0.7615`, `l1div=12.6997`
+
+### Early conclusion
+- Starting from stable base works with the updated loader and new architecture.
+- On 1-epoch stable-start A/B, decoder-side gated prior improved FID over control (`0.4474` vs `0.4845`).
+- Small tradeoff observed in this short run: slightly lower align and higher L1Div; requires longer training to assess final balance.
+
+Timestamp: 2026-04-02
+
+## Joint Base+Sparse Weight-Embedding Ablation (Live Status)
+
+### Objective
+- Verify that current long-running ablations use weight-informed embeddings in both pathways:
+  - sparse semantic pathway, and
+  - base/beat pathway.
+- Confirm that base and sparse are jointly trained in the same runs.
+
+### Active runs
+- Scheduler jobs (running):
+  - `5137576` (`abl_e20_joint_arm_g1_r2`)
+  - `5137577` (`abl_e20_joint_split_g2_r2`)
+  - `5137578` (`abl_e20_joint_all_g3_r2`)
+
+### Runtime confirmation from logs
+- `abl_e20_joint_arm_g1_r2`:
+  - `mass_cond_mode=arm_combined_core`
+  - `base_mass_cond_mode=arm_combined_core`
+  - `joint_train_base_in_sparse=True`
+  - `Base module is trainable and added to optimizer`
+- `abl_e20_joint_split_g2_r2`:
+  - `mass_cond_mode=split_arm_core`
+  - `base_mass_cond_mode=split_arm_core`
+  - `joint_train_base_in_sparse=True`
+  - `Base module is trainable and added to optimizer`
+- `abl_e20_joint_all_g3_r2`:
+  - `mass_cond_mode=all_joints_core`
+  - `base_mass_cond_mode=all_joints_core`
+  - `joint_train_base_in_sparse=True`
+  - `Base module is trainable and added to optimizer`
+
+### Code-path confirmation
+- Base/beat conditioning is implemented in `models/semtalk.py` (`semtalk_base`):
+  - `base_mass_cond_vector` + `base_mass_cond_proj`
+  - mass prior injected into `in_audio_body` in both `forward()` and `forward_latent()`.
+- Sparse conditioning is implemented in `models/semtalk.py` (`semtalk_sparse`):
+  - `mass_cond_vector` + `mass_cond_proj`
+  - mass prior injected into `body_semantic_pure` before S-VIB gate construction.
+- Joint base optimization is implemented in `semtalk_sparse_trainer.py`:
+  - when `joint_train_base_in_sparse=True`, base parameters are unfrozen and added to optimizer.
+
+### Live training snapshot (at logging time)
+- `abl_e20_joint_arm_g1_r2`:
+  - last step: `[012][110/116]`
+  - recent eval: FID `0.9834`, Align `0.7911`, L1Div `12.4617`
+- `abl_e20_joint_split_g2_r2`:
+  - last step: `[013][070/116]`
+  - recent eval: FID `0.9370`, Align `0.7860`, L1Div `11.7305`
+- `abl_e20_joint_all_g3_r2`:
+  - last step: `[012][110/116]`
+  - recent eval: FID `0.9907`, Align `0.7870`, L1Div `12.8308`
+
+### Current conclusion
+- Yes: the current r2 ablations are using weight-informed embeddings for both base/beat and sparse pathways, and they are training base jointly with sparse.
+
+Timestamp: 2026-04-01
+
+## Ground-Truth Test-Split Beat vs Semantic Validationq
+
+### Goal
+- Validate dynamics conclusions on BEAT2 ground truth (not model outputs), split test-set motion into beat and semantic windows, and compare frequency/coupling while accounting for very different window lengths.
+
+### New script
+- `utils/run_gt_semantic_beat_validation.py`
+- Features:
+  - Reads GT motion from `smplxflame_30/*.npz` and semantic labels from `sem/*.txt`.
+  - Uses BEAT2 `train_test_split.csv` with `--split test` by default.
+  - Splits contiguous windows into beat (score <= 0.1 or beat tag) vs semantic.
+  - Handles different window lengths by reporting both:
+    - window-level means, and
+    - duration-weighted means.
+  - Adds hierarchical bootstrap CIs with speaker->clip->window resampling.
+  - Includes feature-group comparison for conditioning design:
+    - shoulder only
+    - split arm + core
+    - arm combined + core
+    - all joints + core
+
+### Commands run
+```bash
+./scripts/agent_connect.sh "python utils/run_gt_semantic_beat_validation.py --beat2_dir BEAT2/beat_english_v2.0.0 --split test --n_per_speaker 3 --min_window_frames 15 --bootstrap 500 --output outputs/gt_semantic_beat_validation_testsplit.json"
+
+./scripts/agent_connect.sh "python utils/run_gt_semantic_beat_validation.py --beat2_dir BEAT2/beat_english_v2.0.0 --split test --n_per_speaker 3 --min_window_frames 30 --bootstrap 400 --output outputs/gt_semantic_beat_validation_testsplit_min30.json"
+
+./scripts/agent_connect.sh "python utils/run_gt_semantic_beat_validation.py --beat2_dir BEAT2/beat_english_v2.0.0 --split test --n_per_speaker 0 --min_window_frames 15 --bootstrap 300 --output outputs/gt_semantic_beat_validation_testsplit_full.json"
+```
+
+### Key outcomes (test split)
+- Processed clips: 75
+- Windows: beat 527, semantic 492 (min window 15)
+- Duration mismatch confirmed:
+  - beat mean duration ~8.67s
+  - semantic mean duration ~1.15s
+- Frequency/coupling separation:
+  - beat shoulder peak (duration-weighted) ~1.11 Hz
+  - semantic shoulder peak (duration-weighted) ~1.75 Hz
+  - beat PLV ~0.29 vs semantic PLV ~0.51
+- Feature-group recommendation:
+  - best in both categories: arm_combined_core
+  - all_joints_core is weaker/less stable than arm-focused groups in this setup.
+- Sensitivity check with min window 30 frames kept the same qualitative conclusions.
+
+### Full test-set run (n_per_speaker=0)
+- Processed clips: 265 (all available test clips)
+- Windows: beat 1874, semantic 1785
+- Duration-weighted metrics:
+  - beat: shoulder peak ~1.118 Hz, PLV ~0.308, oscillator R2 ~0.406
+  - semantic: shoulder peak ~1.686 Hz, PLV ~0.525, oscillator R2 ~0.509
+- Conditioning feature groups (delta R2 vs shoulder-only):
+  - beat: arm_combined_core ~+0.843, split_arm_core ~+0.781, all_joints_core ~-0.951
+  - semantic: arm_combined_core ~+4.021, split_arm_core ~-11.99, all_joints_core ~-5.20
+- Practical implication:
+  - Arm-combined + core is consistently strongest; all-joint conditioning appears noisy/less stable.
+
+Timestamp: 2026-04-01
+
+## Robust Coupled-Swing Validation (Bootstrap + Sensitivity + Synthetic)
+
+### What was added
+- New validation runner: `utils/run_coupled_validation.py`
+- The runner performs four checks in one pass:
+  - Hierarchical bootstrap confidence intervals (speaker + sequence resampling) for Welch PSD peak frequency and coupled estimators.
+  - Shoulder/core joint-definition sensitivity analysis (3 shoulder definitions x 3 core definitions).
+  - Synthetic sanity test with known frequency/phase to verify estimator recovery.
+  - Multi-estimator triangulation summary (PSD peak, PLV/lead-lag, oscillator fit, predictor delta-R2).
+
+### Method detail
+- Uses signed dominant angular-velocity component (PCA projection) instead of velocity norm magnitude to avoid frequency folding artifacts.
+- Works directly from NPZ pose tensors (`poses`/`pose`/`joints`) reshaped to `[T, J, 3]`.
+
+### Executed command
+```bash
+./scripts/agent_connect.sh "python utils/run_coupled_validation.py --input_glob 'demo/*.npz' --output outputs/coupled_validation_report.json --bootstrap 600 --max_files 120"
+```
+
+### Output artifact
+- `outputs/coupled_validation_report.json`
+
+### Run summary (demo set)
+- Input files: 17
+- Valid sequences: 17
+- Conditions found: `base`, `moclip`, `svib`, `other`
+- Synthetic sanity:
+  - Peak recovery pass: true
+  - Lag recovery pass: true
+
 _Timestamp: 2026-02-24 00:42:00
 
 Git Version: ff129d5
@@ -77,6 +283,100 @@ Actionable next steps (recommended):
 Notes:
 - The best empirical model in this session is `best_190.bin` (FGD 0.4189) — prefer this checkpoint for downstream demos and evaluation.
 - FlowMatching is a high-potential item (could further reduce FGD), but it requires trainer + experiment scaffolding before claiming improvements in any submission.
+
+---
+
+Timestamp: 2026-03-30
+
+## Coupled Swing Analysis + Dual-Stage Conditioning Update
+
+### Motivation
+- Sparse outputs remained too close to base SemTalk because semantic influence was mostly late-stage.
+- The previous beat alignment metric treated upper-arm and forearm dynamics too independently for testing the “upper arm only” hypothesis.
+
+### Implemented Changes
+
+1) Dual-stage semantic conditioning in sparse model
+- File: `models/semtalk.py`
+- Restored emotion-text semantic fusion (was effectively dropped before):
+  - `fusion_body_semantic = feat_clip_text_body * alpha[...,1] + emotion_clip_text_body * alpha[...,0]`
+- Added early conditioning before motion self-encoding:
+  - semantic prior injected into `motion_embeddings`.
+- Added mid/pre-decoder conditioning before cross-part decoding:
+  - semantic prior injected into `upper/hands/lower` latent streams.
+- Added config flags:
+  - `dual_stage_cond_enabled`
+  - `early_cond_scale`
+  - `mid_cond_scale`
+
+2) Soft blending instead of hard gate switching at inference
+- File: `semtalk_sparse_trainer.py`
+- Replaced binary `torch.where(gate != 0, sparse, base)` token switch with soft gate-weighted logit blending:
+  - `cls_mix = (1-psi)*cls_base + psi*cls_sparse`
+  - then argmax on blended logits.
+- Applied in both test/inference generation paths.
+- Kept hard gate only for reporting/diagnostics.
+
+3) Base-to-sparse latent bridge retained and active
+- File: `models/semtalk.py`
+- Existing bounded bridge is preserved:
+  - stronger base guidance on low-semantic chunks,
+  - sparse dominance on high-semantic chunks.
+
+4) Coupled dynamics metrics implemented
+- File: `utils/metric.py`
+- Added `CoupledSwingAnalyzer` with:
+  - Segment angular velocity coherence:
+    - local-frame omega for upper-arm and forearm,
+    - PLV,
+    - lead-lag frames/seconds and lag correlation.
+  - Coupled oscillator fit score:
+    - 2-link weakly coupled oscillator regression,
+    - explained variance (`r2_upper`, `r2_forearm`),
+    - coupling strength asymmetry (`|k12-k21|`).
+  - Cross-frequency coupling:
+    - low-frequency shoulder vs high-frequency forearm envelope,
+    - correlation + mutual information.
+  - Predictor analysis (out-of-speaker):
+    - shoulder only,
+    - forearm only,
+    - shoulder+forearm+torso,
+    - plus audio+gate,
+    - reports mean R2 and delta R2 vs shoulder baseline, plus MI proxy.
+  - Audio-conditioned causality (Granger-style):
+    - lagged restricted vs full models,
+    - `delta_r2_audio`, F-stat, top audio lag attribution.
+
+5) Runnable evaluation script
+- New file: `utils/run_coupled_swing_eval.py`
+- Produces JSON report with per-sequence coupled dynamics and dataset-level predictor/causality summaries.
+
+### Config Update
+- File: `configs/semtalk_moclip_sparse.yaml`
+- Added:
+  - `dual_stage_cond_enabled: true`
+  - `early_cond_scale: 0.20`
+  - `mid_cond_scale: 0.15`
+
+### How to Run the New Swing Evaluation
+
+```bash
+python utils/run_coupled_swing_eval.py \
+  --input_glob "outputs/your_run/**/*.npz" \
+  --joints_key joints \
+  --audio_key audio_onset \
+  --gate_key semantic_gate \
+  --output outputs/coupled_swing_report.json
+```
+
+Notes:
+- Script expects joint trajectories in each NPZ under `joints` with shape `[T, J, 3]`.
+- If `audio_onset` / `semantic_gate` keys are absent, causality and plus-audio-gate analyses degrade gracefully.
+
+### Why this addresses the hypothesis
+- The new analyzer directly tests whether forearm/hand swing is explainable by shoulder alone vs coupled predictors.
+- Out-of-speaker predictor deltas and Granger-style causality provide evidence beyond simple correlation.
+- Dual-stage conditioning reduces base-attractor bias by injecting semantics earlier while keeping late semantic sharpening.
 
 ---
 
@@ -2182,3 +2482,423 @@ x_t = x_t + cond_t
 ---
 
 *Branch: `feature/physics-smoother-svib` — commit hash at time of writing: `7332cd7`*
+
+---
+
+## [2026-04-03] Physics-On Base Sweep (4-GPU) — Final A/B Findings
+
+### A/B Definition
+
+- A (historical reference): MoCLIP-sparse best checkpoint (`best_190.bin`), FGD = **0.4189**.
+- B (current experiment): 4 parallel physics-on **base-stage** runs started from `0402_114145 ... best_55.bin`.
+
+### B-Run Final Metrics (Completed)
+
+All four runs completed successfully (13 eval blocks each, epoch range to 60).
+
+| B variant | Hyperparameters | Best FGD | Final FGD | Final Align | Final L1div |
+|---|---|---:|---:|---:|---:|
+| `physon_hp_l005` | `lambda=0.005, tau=0.50/0.10, alpha=1.0` | **0.5010** | 0.6595 | 0.7568 | 12.8972 |
+| `physon_hp_l015` | `lambda=0.015, tau=0.50/0.10, alpha=1.0` | 0.5016 | **0.6417** | 0.7568 | 12.8759 |
+| `physon_hp_tau065_f015` | `lambda=0.010, tau=0.65/0.15, alpha=1.0` | 0.5017 | 0.7354 | **0.7575** | **12.8477** |
+| `physon_hp_alpha13_w40` | `lambda=0.010, tau=0.50/0.10, alpha=1.3, warmup_end=40` | 0.5174 | 0.6769 | 0.7554 | 12.9062 |
+
+### Direct A vs B Answer (re: "0.4x before")
+
+Yes — compared to A (0.4189), **all four B variants are worse in FGD**.
+
+- `physon_hp_l005`: 0.5010 vs 0.4189 (**+19.60%**)
+- `physon_hp_l015`: 0.5016 vs 0.4189 (**+19.75%**)
+- `physon_hp_tau065_f015`: 0.5017 vs 0.4189 (**+19.76%**)
+- `physon_hp_alpha13_w40`: 0.5174 vs 0.4189 (**+23.52%**)
+
+Methodology caveat:
+
+- This is a run-level pipeline comparison (full generation + evaluator), not an intrinsic sparse-vs-base module score.
+- Sparse/base components do not have standalone FGD in isolation; FGD/FID is measured only on generated outputs.
+
+### Interpretation / Why This Can Happen
+
+- This is not a strict apples-to-apples regression test: A is a **MoCLIP-sparse** best checkpoint, while B runs are **base-stage physics sweeps**.
+- Within the B group, physics-on remains clearly better than recent physics-off base references (best physics-off base FGD observed around 0.8058 / 0.8926 in prior logs).
+- Main takeaway: current base-only physics sweep improved base behavior but did not surpass the historical sparse+MoCLIP best (0.4189).
+
+### Actionable Follow-up
+
+1. Keep `physon_hp_l005` and `physon_hp_l015` best checkpoints as the best B candidates.
+2. Re-run this A/B test in the **same stage** (sparse+MoCLIP + physics variants) for a fair comparison against 0.4189.
+3. Continue best-checkpoint selection; final-epoch metrics are worse than best-epoch metrics in all 4 B runs.
+
+---
+
+## [2026-04-04] Overnight Mass-Prior + Physics Sweep (Stable Base)
+
+### Goal
+
+- Test whether increasing base mass-prior influence (with physics enabled) can close the gap to the earlier strong A/B baseline.
+- Start from stable checkpoint: `weights/best_semtalk_base.bin`.
+
+### Runs and best-checkpoint FGD (same evaluator protocol)
+
+| Run | Key settings | Best epoch | FGD (re-run) |
+|---|---|---:|---:|
+| `massphys_s45_gi2_l005` | mass scale 0.45, gate init -2.0, phys lambda 0.005 | 60 | 0.4606 |
+| `massphys_s60_gi15_l005` | mass scale 0.60, gate init -1.5, phys lambda 0.005 | 0 | 0.4680 |
+| `massphys_s75_gi10_l005` | mass scale 0.75, gate init -1.0, phys lambda 0.005 | 10 | **0.4544** |
+| `massphys_s60_gi15_l010_w30` | mass scale 0.60, gate init -1.5, phys lambda 0.010, warmup_end 30 | 10 | 0.4593 |
+
+### Comparison against key references
+
+- Historical A/B ON baseline (mass prior on, physics off): `0.4474`
+  - New overnight runs are still above by `+1.54%` to `+4.59%`.
+- Historical A/B OFF baseline (mass prior off): `0.4845`
+  - New overnight runs are better by `-3.41%` to `-6.23%`.
+- Previous physics-only sweep best (`physon_hp_l005`): `0.5010`
+  - New overnight runs improve by `-6.59%` to `-9.31%`.
+
+### What this says about influence
+
+1. **Mass prior is a positive influence** in this stage.
+   - Stronger mass-prior settings moved FGD from ~0.50 toward ~0.45.
+
+2. **Physics is not the main positive driver for FGD here**.
+   - Moving from phys lambda `0.005` to `0.010` did not improve best FGD in this sweep.
+   - Physics appears neutral-to-slightly negative for best FGD under these exact settings.
+
+3. **Do not remove physics globally yet, but simplify it in base-stage tuning**.
+   - Recommended for next run: keep mass-prior-best config and use minimal physics (`lambda=0.005`) or delayed physics activation.
+   - Most important next ablation: identical mass-prior config with `base_phys_enabled=false` vs `base_phys_enabled=true` (lambda 0.005) for a strict causal test.
+
+### Decision
+
+- Short answer to "remove physics?": **not fully**.
+- Practical answer for best FGD in this base stage: **prioritize mass prior, keep physics weak/simple** until matched A/B shows clear gain from stronger physics.
+
+---
+
+## [2026-04-04] Consolidated Learning — What Priors/Physics Led to What
+
+### Evaluation protocol (same across entries below)
+
+- `utils/run_fgd_eval.py` with `AESKConv_240_100.bin`
+- Scott subset (15 sequences)
+- Evaluated at each run's `best_*.bin` epoch
+
+### Outcome map
+
+| Family | Prior/physics setup | Best FGD |
+|---|---|---:|
+| Historical A/B ON | **Mass prior ON**, physics OFF | `0.4475` |
+| Historical A/B OFF | Mass prior OFF, physics OFF | `0.4845` |
+| Physics-only sweep | Mass prior OFF, physics ON (best tuned) | `0.5010` |
+| Mass+physics overnight | Mass prior strong + physics low | `0.4544` |
+| Mass-hypothesis boundary sweep | Mass prior strong + **physics OFF/low** | **`0.4341`** |
+
+### Latest boundary sweep details (completed)
+
+| Run | Key settings | Best epoch | FGD |
+|---|---|---:|---:|
+| `masshyp_off_s70_gi12` | mass scale 0.70, gate init -1.2, physics OFF | 10 | **0.4341** |
+| `masshyp_on_l003_s75` | mass scale 0.75, gate init -1.0, physics ON (`lambda=0.003`) | 10 | 0.4465 |
+| `masshyp_off_s85_gi08` | mass scale 0.85, gate init -0.8, physics OFF | 55 | 0.4486 |
+| `masshyp_off_s75_gi10` | mass scale 0.75, gate init -1.0, physics OFF | 10 | 0.4580 |
+
+### What we learn
+
+1. **Mass prior is the dominant positive lever** in this base-stage line.
+  - Turning on stronger mass prior consistently moved us from ~0.50 toward ~0.43–0.45.
+
+2. **Physics is not universally beneficial once mass prior is strong**.
+  - In the latest boundary test, the best run is physics OFF (`0.4341`), beating minimal-physics control (`0.4465`).
+
+3. **Mass strength is non-monotonic**.
+  - Very strong mass scale (0.85) was not best; moderate-strong (0.70) performed best in this sweep.
+
+4. **New local high score in this base-stage branch** is `0.4341`.
+  - Better than historical A/B ON (`0.4475`) and far better than physics-only (`0.5010`).
+  - Still above sub-0.4 target by ~`0.034` absolute.
+
+### Updated decision (supersedes prior note above)
+
+- For this base-stage path, **prefer mass-prior-first and simplify physics aggressively**.
+- Immediate default for next runs: keep mass prior on (`arm_combined_core`) and test physics OFF as primary branch, with one low-physics control only.
+
+---
+
+## [2026-04-05] All-Speaker Sweep Launch (In Progress)
+
+### Why this run
+
+- Move beyond Scott-only (15-sequence) comparisons to all-participant scope.
+- Apply the latest boundary-sweep learning (mass-prior-first, physics as control) at full speaker coverage.
+
+### Submission snapshot
+
+- Script: `scripts/submit_all_speakers_fgd_sweep.py`
+- Sweep name: `allspk_masshyp3`
+- Seed checkpoint: `outputs/custom/0404_123353_semtalk_base_0404_123320_masshyp_off_s70_gi12_semtalk_base/best_10.bin`
+- qsub job: `5151039` (`allspk_massh`) on `mld.q@gridnode016`
+- Parallelism: 4 concurrent GPU runs (one per variant)
+
+### Target coverage
+
+- Selected speakers: 25 (`[1,2,3,4,5,6,7,9,10,11,12,13,15,16,17,18,20,21,22,23,24,25,27,28,30]`)
+- Split counts over selected speakers:
+  - train: `1093`
+  - val: `106`
+  - test: `265`
+  - additional: `156`
+
+### Launched variants
+
+| Variant | Key settings |
+|---|---|
+| `allspk_off_s70_gi12` | `base_mass_cond_scale=0.70`, `base_mass_cond_gate_init=-1.2`, `base_phys_enabled=false` |
+| `allspk_off_s75_gi10` | `base_mass_cond_scale=0.75`, `base_mass_cond_gate_init=-1.0`, `base_phys_enabled=false` |
+| `allspk_off_s85_gi08` | `base_mass_cond_scale=0.85`, `base_mass_cond_gate_init=-0.8`, `base_phys_enabled=false` |
+| `allspk_on_l003_s70` | `base_mass_cond_scale=0.70`, `base_mass_cond_gate_init=-1.2`, `base_phys_enabled=true`, `base_phys_lambda=0.003` |
+
+### Runtime state (at launch check)
+
+- Job transitioned to `r` (running) on `gridnode016`.
+- qsub orchestrator log confirms all 4 runs launched.
+- Per-run logs show successful resume from seed checkpoint and entry into training loop.
+- Best all-speaker FGD not available yet (pending first eval outputs / post-run re-eval).
+
+---
+
+Timestamp: 2026-04-07
+
+## NeurIPS Submission Timeline (Step-by-Step)
+
+### Working assumptions
+
+- Track for NeurIPS 2026 main conference.
+- Hard dates (abstract, paper, supplementary, rebuttal, camera-ready) must be confirmed immediately from the official CFP.
+- Goal: submit the sparse-revival and hybrid-gating line with full reproducibility.
+
+### Step-by-step timeline
+
+1. Week of 2026-04-07: freeze benchmark protocol.
+  - Lock fair-eval entrypoint and metrics (`fid`, `align`, `l1div`, `l2`, `lvel`, inference time).
+  - Keep one canonical test split and speaker policy for all result tables.
+  - Archive current baselines (release base, release sparse, best historical sparse).
+2. Week of 2026-04-14: run core training sweep.
+  - Train revival baseline (`gate_blend_alpha=0.0`) and hybrid settings (`0.35`, `0.55`).
+  - Use 3 seeds per setting.
+  - Save checkpoints and logs with standardized naming.
+3. Week of 2026-04-21: full evaluation and significance checks.
+  - Evaluate all candidates under one fixed protocol.
+  - Compute mean/std across seeds and delta vs SemTalk baselines.
+  - Pick one primary model and one fallback model.
+4. Week of 2026-04-28: ablations and stress tests.
+  - Run ablations for S-VIB only, linear gate only, and hybrid gate.
+  - Stress test long clips, speaker subsets, and outlier audio.
+  - Build a failure-case qualitative set.
+5. Week of 2026-05-05: draft paper v1.
+  - Write method, experiments, and related work around frozen result tables.
+  - Add compute cost, hardware, and training-time reporting.
+  - Draft reproducibility appendix with exact commands/configs.
+6. Week of 2026-05-12: internal review and paper freeze v2.
+  - Verify all headline numbers directly from raw logs.
+  - Finalize figures, captions, and claim wording.
+  - Freeze final candidate checkpoint for submission.
+7. NeurIPS abstract deadline week (T0).
+  - Submit title, abstract, and author metadata.
+  - Run anonymity and formatting compliance pass.
+8. NeurIPS full paper deadline week (T0+about 1 week).
+  - Submit main paper, supplementary, and artifact statement.
+  - Verify PDF integrity and references before final click.
+9. Post-submission rebuttal prep.
+  - Prepare response templates and reproducibility bundle.
+  - Keep targeted follow-up experiments queued for reviewer questions.
+10. Camera-ready phase (if accepted).
+  - Integrate rebuttal-driven clarifications.
+  - Publish cleaned code/config release and model card.
+
+### Potential downfalls
+
+1. Evaluation mismatch across runs.
+  - Risk: unfair comparisons due to split, speaker, or config drift.
+  - Mitigation: one evaluator script and immutable candidate list per table.
+2. Legacy checkpoint incompatibility.
+  - Risk: architecture drift causes degraded or invalid comparisons.
+  - Mitigation: log missing/unexpected keys and run legacy models with native configs when needed.
+3. Overfitting to small subsets.
+  - Risk: gains on speaker-2 subsets do not transfer to full test distribution.
+  - Mitigation: require full-scope results for all headline claims.
+4. Single-seed optimism.
+  - Risk: reporting a lucky seed as a systematic improvement.
+  - Mitigation: minimum 3 seeds for every headline result.
+5. DDP instability on cluster.
+  - Risk: training hangs break timeline and consume compute budget.
+  - Mitigation: keep 1-GPU fallback path and rank-level logging enabled.
+6. Metric-only gains without perceptual quality.
+  - Risk: lower FID with unnatural motion quality.
+  - Mitigation: include qualitative panel and explicit failure-case analysis.
+7. Writing bottleneck near deadline.
+  - Risk: strong results but weak story/clarity.
+  - Mitigation: freeze figures early and iterate the draft in parallel with experiments.
+8. Reproducibility gaps.
+  - Risk: cannot regenerate final tables from a clean environment.
+  - Mitigation: maintain scripted end-to-end reproduction and pin versions.
+
+### Immediate actions
+
+- Confirm official NeurIPS 2026 dates and replace T0 placeholders with exact dates.
+- Launch the 3-seed hybrid revival sweep.
+- Start paper skeleton in parallel with experiments.
+
+---
+
+Timestamp: 2026-04-08
+
+## NeurIPS Prep Sprint — Day 1 (2026-04-08)
+
+### Summary
+
+Kicked off the NeurIPS preparation from the TODO plan. Implemented code changes,
+fixed infrastructure issues, launched key experiments, and identified critical
+evaluation protocol gaps.
+
+### Code changes
+
+1. **gate_psi NPZ save** (`semtalk_sparse_trainer.py`)
+   - Modified `_g_test()` to collect `gate_psi` values into return dict.
+   - Modified `test()` and `inference()` to save `gate_psi` in output NPZ files.
+   - Enables downstream visualization of semantic gate activations per frame.
+
+2. **Physics EMA initial_state API** (`models/physics_smoother.py`)
+   - Added `initial_state` parameter to `smooth_poses()` and `forward_inference()`.
+   - Allows seeding EMA from the last frame of a previous AR chunk.
+   - Backward-compatible: defaults to `None` (original behavior).
+
+3. **Checkpoint loading fix** (`utils/other_tools.py`)
+   - Added `'mass_cond_'` and `'module.mass_cond_'` to `_is_allowed_non_strict`
+     in both `load_checkpoints()` and `load_checkpoints2()`.
+   - Fixes: older checkpoints (e.g. `best_184.bin`, trained before `mass_cond`
+     was added to the sparse model) can now load into the current architecture
+     that includes mass-conditioning layers.
+   - Without this fix, loading crashed with `RuntimeError: Missing key(s)
+     ['module.mass_cond_vector', 'module.mass_cond_proj.*']`.
+
+4. **New configs**
+   - `configs/semtalk_moclip_sparse_allspk_eval.yaml` — all 30 speakers eval config.
+   - `configs/semtalk_moclip_svib_only.yaml` — S-VIB ablation (no physics).
+
+5. **Cluster job scripts** (`scripts/`)
+   - `qsub_gen_allspk_cache.sh` — cache generation + FGD eval.
+   - `qsub_3seed_training.sh` — parallel 3-seed training with per-process
+     `CUDA_VISIBLE_DEVICES` and `MASTER_PORT` to avoid device and port collisions.
+   - `qsub_train_svib_only.sh` — S-VIB-only ablation training.
+   - `neurips_orchestrator.sh` — master script (not yet used in production).
+
+### Infrastructure issues fixed
+
+| Issue | Root cause | Fix |
+|-------|-----------|-----|
+| Job port collision | Two jobs on same node both use MASTER_PORT=8680 | Added `MASTER_PORT=8681/8682+` per script |
+| SMP slot starvation | Scripts requested 4-8 slots on 8-slot node | Reduced: eval=2, 3seed=3, svib=4 |
+| DataParallel device mismatch | `--gpus 1` puts model on cuda:0 but wraps as cuda:1 | Use `CUDA_VISIBLE_DEVICES=$GPU_ID --gpus 0` |
+| mass_cond checkpoint keys | Old checkpoints lack `mass_cond_*` keys | Added to allowed_prefixes in non-strict loader |
+
+### Jobs launched
+
+| Job ID | Name | Config | Status (as of 15:15 CEST) |
+|--------|------|--------|--------------------------|
+| 5157950 | svib_only | `semtalk_moclip_svib_only.yaml` | Running, epoch ~185/200 |
+| 5159102 | neurips_3seed | `semtalk_moclip_sparse.yaml` × 3 seeds | Running, seeds 7+123 at epoch ~219, seed 42 at ~192 |
+| 5159088 | gen_allspk | allspk eval of best_184.bin | **Completed** |
+
+### 15-sequence FGD eval results (speaker 2 only)
+
+Completed eval for best_184.bin (S-VIB + physics):
+
+| Metric | Value |
+|--------|-------|
+| FGD | 0.4202 |
+| BC | 0.7663 |
+| L1div | 12.751 |
+| Inference time | 385 s for 956 s motion |
+
+### 3-seed preliminary results (still running, 15-seq speaker 2)
+
+S-VIB + physics, trained from best_184.bin, epochs 184 → 220:
+
+| Seed | Best FGD | BC (last) | Epochs completed |
+|------|----------|-----------|-----------------|
+| 42 | 0.4182 | 0.7651 | ~192/220 (still running) |
+| 123 | 0.4225 | 0.7668 | ~219/220 |
+| 7 | 0.4182 | 0.7651 | ~219/220 |
+
+Preliminary mean±std: FGD = 0.4196 ± 0.0025 (will update when seed 42 finishes).
+
+### S-VIB only ablation (no physics, training from scratch)
+
+| Epoch | Best FGD so far |
+|-------|-----------------|
+| ~185/200 | 0.4188 |
+
+### Critical finding: allspk test cache is invalid
+
+The "265-sequence all-speaker" test cache `beat2_semtalk_test_moclip_allspk.pkl`
+is **byte-identical** to the standard 15-sequence Scott-only pickle
+`beat2_semtalk_test_moclip.pkl` (same MD5). The cache generation was skipped
+because the file already existed at generation time. Consequences:
+
+- The "265-seq FGD=0.4202" result above is actually a **15-sequence** eval.
+- A proper all-speaker test cache still needs to be generated correctly.
+- The `save_test_dataset.py` script generated the file on a prior run but with
+  the wrong speaker filter; the existing file was then reused.
+
+### Critical finding: released best_semtalk_sparse.bin cannot load
+
+The released `weights/best_semtalk_sparse.bin` checkpoint (from original ICCV
+submission) fails to load in the current codebase due to architecture drift: the
+model now expects S-VIB, mass-conditioning, and physics modules that did not
+exist when the checkpoint was saved. The non-strict loader rejects it because
+the missing keys go beyond the allowed prefixes.
+
+This means: **we cannot reproduce the paper's reported FGD=0.4278 from the
+released checkpoint**. The retrained baseline `abl_none_e60_b25` (no S-VIB, no
+physics, only 25 epochs) hits FGD=0.4278 on the 15-seq split, which matches
+the paper number but is not from the same checkpoint.
+
+### Existing comparable results inventory (all 15-seq, speaker 2)
+
+| Condition | Checkpoint | Best FGD | BC |
+|-----------|-----------|---------|-----|
+| Released SemTalk base | `weights/best_semtalk_base.bin` | 0.4300 | 0.7568 |
+| +MoCLIP sparse (linear gate) | `0223_191250/best_149.bin` | 0.4118 | — |
+| +MoCLIP sparse (converged) | `0223_224354/best_190.bin` | 0.4189 | — |
+| +S-VIB only (no physics) | `svib_only/best_30.bin` (still training) | 0.4188 | — |
+| +S-VIB + physics (best single) | `s01_base_r05/best_184.bin` | 0.4137 | 0.7457 |
+| +S-VIB + physics (3-seed mean) | 3× from best_184.bin finetuned | ~0.4196 ± 0.0025 | ~0.7657 |
+| Ablation: no priors (25 epochs) | `abl_none_e60_b25` | 0.4278 | 0.7596 |
+
+### Open questions for paper narrative
+
+1. **Mass prior contribution**: currently the mass prior is embedded inside the
+   physics smoother (De Leva per-joint τ). It does not have an independent
+   toggle. To show its contribution separately, we would need a
+   "uniform-mass physics" ablation (all joints get the same τ), which has never
+   been run.
+
+2. **Physics FGD regression**: S-VIB alone achieves FGD ≈ 0.4188, while S-VIB +
+   physics gets 0.4137 (best seed) / 0.4196 (3-seed mean). The improvement is
+   small and noisy. Physics may be hurting FGD slightly via over-smoothing while
+   improving perceptual quality (lower jerk = smoother motion). This needs to
+   be framed as a quality-vs-metric tradeoff, supported by jerk reduction numbers
+   and human evaluation.
+
+3. **Proper 265-seq eval**: all headline numbers must eventually be computed on
+   the correct full test set for NeurIPS. The 15-seq subset is an internal
+   development metric only.
+
+### Next actions
+
+1. Generate the correct 265-sequence all-speaker test cache (fix `save_test_dataset.py` or regenerate with a different output path).
+2. Wait for svib_only (epoch ~185 of 200, ~1.5h) and 3-seed (seed 42 ~1h) to finish.
+3. Run matched 265-seq eval on all 4 ablation checkpoints.
+4. Decide on mass prior treatment: either (a) run a uniform-mass physics ablation, (b) drop mass prior as a separate claim and fold it into the physics design, or (c) if it hurts FGD, just present physics smoothing without mass weighting.
+5. Begin paper skeleton with frozen ablation table structure.

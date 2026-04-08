@@ -23,6 +23,7 @@ from optimizers.scheduler_factory import create_scheduler
 from optimizers.loss_factory import get_loss_func
 from dataloaders.data_tools import joints_list
 import librosa
+from models.physics_smoother import PhysicsSmootherSMPLX, UPPER_JOINT_IDX, HANDS_JOINT_IDX, LOWER_JOINT_IDX
 
 class CustomTrainer(train.BaseTrainer):
     def __init__(self, args):
@@ -50,7 +51,7 @@ class CustomTrainer(train.BaseTrainer):
         for joint_name in self.tar_joint_list_lower:
             self.joint_mask_lower[self.ori_joint_list[joint_name][1] - self.ori_joint_list[joint_name][0]:self.ori_joint_list[joint_name][1]] = 1
 
-        self.tracker = other_tools.EpochTracker([ "hubert_cons","beat_cons","acc_face", "acc_hands", "acc_upper", "acc_lower", "fid", "l1div", "bc", "rec", "trans", "vel", "transv", 'dis', 'gen', 'acc', 'transa', 'exp', 'lvd', 'mse', "cls", "rec_face", "latent", "cls_full", "cls_self", "cls_word", "latent_word","latent_self"], [False,True,True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False,False,False,False,  False,False,False,False,False,False])
+        self.tracker = other_tools.EpochTracker([ "hubert_cons","beat_cons","acc_face", "acc_hands", "acc_upper", "acc_lower", "fid", "l1div", "bc", "rec", "trans", "vel", "transv", 'dis', 'gen', 'acc', 'transa', 'exp', 'lvd', 'mse', "cls", "rec_face", "latent", "cls_full", "cls_self", "cls_word", "latent_word","latent_self", "phys_jerk", "phys_beta", "base_mass_gate"], [False,True,True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False,False,False,False,  False,False,False,False,False,False, False, False, True])
         ##### vq_model #####
         vq_model_module = __import__(f"models.motion_representation", fromlist=["something"])
         rvq_model_module = __import__(f"models.rvq", fromlist=["something"])
@@ -90,11 +91,37 @@ class CustomTrainer(train.BaseTrainer):
         self.vq_model_lower.eval()
         self.global_motion.eval()
 
+        # VQ decoders are fixed teachers; disable parameter gradients to save memory.
+        for m in [self.vq_model_face, self.vq_model_upper, self.vq_model_hands, self.vq_model_lower, self.global_motion]:
+            for p in m.parameters():
+                p.requires_grad = False
+
         self.cls_loss = nn.NLLLoss().to(self.rank)
         self.reclatent_loss = nn.MSELoss().to(self.rank)
         self.vel_loss = torch.nn.L1Loss(reduction='mean').to(self.rank)
         self.rec_loss = get_loss_func("GeodesicLoss").to(self.rank) 
         self.log_softmax = nn.LogSoftmax(dim=2).to(self.rank)
+
+        # Optional beat/base-stage physics smoother.
+        self._base_phys_enabled = bool(getattr(args, 'base_phys_enabled', False))
+        self._base_phys_lambda = float(getattr(args, 'base_phys_lambda', 0.01))
+        self._base_phys_warmup_start = int(getattr(args, 'base_phys_warmup_start', 30))
+        self._base_phys_warmup_end = int(getattr(args, 'base_phys_warmup_end', 80))
+        if self._base_phys_enabled:
+            self.physics_smoother = PhysicsSmootherSMPLX(
+                num_joints=self.joints,
+                tau_base=float(getattr(args, 'base_phys_tau_base', 0.50)),
+                tau_floor=float(getattr(args, 'base_phys_tau_floor', 0.10)),
+                alpha=float(getattr(args, 'base_phys_alpha', 1.0)),
+                pose_fps=self.args.pose_fps,
+            ).to(self.rank)
+            logger.info(
+                f"[base_trainer] PhysicsSmoother enabled "
+                f"(tau_base={self.physics_smoother.tau_base}, "
+                f"tau_floor={self.physics_smoother.tau_floor}, "
+                f"alpha={self.physics_smoother.alpha}, "
+                f"lambda={self._base_phys_lambda})"
+            )
       
     
     def inverse_selection(self, filtered_t, selection_array, n):
@@ -132,6 +159,20 @@ class CustomTrainer(train.BaseTrainer):
             return type(obj)(self._move_to_device(v, device) for v in obj)
         return obj  # 其余类型原样返回
 
+    def _compute_base_phys_beta(self, epoch):
+        """Sigmoid warmup for base-stage physics jerk loss: 0 -> base_phys_lambda."""
+        if not self._base_phys_enabled:
+            return 0.0
+        if epoch < self._base_phys_warmup_start:
+            return 0.0
+        t = (epoch - self._base_phys_warmup_start) / max(
+            self._base_phys_warmup_end - self._base_phys_warmup_start, 1
+        )
+        t = min(t, 1.0)
+        import math
+        sig = 1.0 / (1.0 + math.exp(-6.0 * (t - 0.5)))
+        return self._base_phys_lambda * sig
+
     def _g_training(self, loaded_data, use_adv, mode="train", epoch=0):
         bs, n, j = loaded_data["tar_pose"].shape[0], loaded_data["tar_pose"].shape[1], self.joints
         mask_val = torch.ones(bs, n, self.args.pose_dims+3+4).float().cuda() # 和latent_all的维度一样
@@ -152,6 +193,71 @@ class CustomTrainer(train.BaseTrainer):
         loss_latent = self.args.lf*loss_latent_face + self.args.ll*loss_latent_lower + self.args.lh*loss_latent_hands + self.args.lu*loss_latent_upper
         self.tracker.update_meter("latent", "train", loss_latent.item())
         g_loss_final += loss_latent/6
+
+        # Monitor whether the learned scalar gate keeps or suppresses mass prior.
+        model_ref = self.model.module if hasattr(self.model, "module") else self.model
+        if hasattr(model_ref, "base_mass_cond_gate"):
+            gate_val = torch.sigmoid(model_ref.base_mass_cond_gate.detach()).item()
+            if hasattr(model_ref, "_base_mass_cond_enabled") and not model_ref._base_mass_cond_enabled:
+                gate_val = 0.0
+            self.tracker.update_meter("base_mass_gate", "train", gate_val)
+
+        # Optional beat/base-stage physics loss on decoded rot6d poses.
+        # Unlike sparse-stage physics, there is no semantic gate here; use ψ=0.
+        phys_beta = self._compute_base_phys_beta(epoch)
+        if self._base_phys_enabled and phys_beta > 0:
+            upper_lat = net_out_val["rec_upper"][:, 0, 0]   # [B, T', C]
+            hands_lat = net_out_val["rec_hands"][:, 0, 0]   # [B, T', C]
+            lower_lat = net_out_val["rec_lower"][:, 0, 0]   # [B, T', C]
+
+            dec_upper = self.vq_model_upper.decoder(upper_lat.permute(0, 2, 1))  # [B, T_dec, 78]
+            dec_hands = self.vq_model_hands.decoder(hands_lat.permute(0, 2, 1))  # [B, T_dec, 180]
+            dec_lower = self.vq_model_lower.decoder(lower_lat.permute(0, 2, 1))  # [B, T_dec, 61]
+
+            b_dec, t_dec, pose_dim_upper = dec_upper.shape
+            if pose_dim_upper % 6 != 0:
+                raise RuntimeError(f"upper decoder output dim {pose_dim_upper} not divisible by 6")
+            n_joints_upper = pose_dim_upper // 6
+            dec_upper_6d = dec_upper.reshape(b_dec, t_dec, n_joints_upper, 6)
+
+            pose_dim_hands = dec_hands.shape[2]
+            if pose_dim_hands % 6 != 0:
+                raise RuntimeError(f"hands decoder output dim {pose_dim_hands} not divisible by 6")
+            n_joints_hands = pose_dim_hands // 6
+            dec_hands_6d = dec_hands.reshape(b_dec, t_dec, n_joints_hands, 6)
+
+            n_joints_lower = len(LOWER_JOINT_IDX)
+            dec_lower_6d = dec_lower[:, :, :(n_joints_lower * 6)].reshape(b_dec, t_dec, n_joints_lower, 6)
+
+            t_prime = upper_lat.shape[1]
+            gate_psi_zeros = torch.zeros(b_dec, t_prime, 1, device=upper_lat.device)
+            tau_all = self.physics_smoother.compute_tau(gate_psi_zeros, None)  # [B, T', 55]
+
+            tau_upper_tp = tau_all[:, :, UPPER_JOINT_IDX]
+            tau_hands_tp = tau_all[:, :, HANDS_JOINT_IDX]
+            tau_lower_tp = tau_all[:, :, LOWER_JOINT_IDX]
+
+            if t_dec != t_prime:
+                tau_upper = F.interpolate(
+                    tau_upper_tp.permute(0, 2, 1), size=t_dec, mode='nearest'
+                ).permute(0, 2, 1)
+                tau_hands = F.interpolate(
+                    tau_hands_tp.permute(0, 2, 1), size=t_dec, mode='nearest'
+                ).permute(0, 2, 1)
+                tau_lower = F.interpolate(
+                    tau_lower_tp.permute(0, 2, 1), size=t_dec, mode='nearest'
+                ).permute(0, 2, 1)
+            else:
+                tau_upper, tau_hands, tau_lower = tau_upper_tp, tau_hands_tp, tau_lower_tp
+
+            phys_jerk = (
+                self.physics_smoother.compute_pose_jerk_loss(dec_upper_6d, tau_upper)
+                + self.physics_smoother.compute_pose_jerk_loss(dec_hands_6d, tau_hands)
+                + self.physics_smoother.compute_pose_jerk_loss(dec_lower_6d, tau_lower)
+            )
+            g_loss_final = g_loss_final + phys_beta * phys_jerk
+            self.tracker.update_meter("phys_jerk", "train", phys_jerk.item())
+            self.tracker.update_meter("phys_beta", "train", phys_beta)
         
         
         self.now_epoch += 1
@@ -469,9 +575,12 @@ class CustomTrainer(train.BaseTrainer):
 
     def test(self, epoch):
         results_save_path = self.checkpoint_path + f"/{epoch}/"
-        if os.path.exists(results_save_path): 
-            return 0
-        os.makedirs(results_save_path)
+        if os.path.exists(results_save_path):
+            logger.warning(
+                f"[test] Skip epoch {epoch}: results already exist at {results_save_path}"
+            )
+            return None
+        os.makedirs(results_save_path, exist_ok=True)
         start_time = time.time()
         total_length = 0
         test_seq_list = self.test_data.selected_file

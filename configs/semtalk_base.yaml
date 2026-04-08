@@ -89,6 +89,20 @@ g_name: semtalk_base
 trainer: semtalk_base
 hidden_size: 768
 n_layer: 1
+
+# optional beat/base-stage physics smoother (disabled by default)
+base_phys_enabled: false
+base_phys_tau_base: 0.50
+base_phys_tau_floor: 0.10
+base_phys_alpha: 1.0
+base_phys_lambda: 0.01
+base_phys_warmup_start: 30
+base_phys_warmup_end: 80
+
+# optional weight-informed prior for base model
+base_mass_cond_mode: none
+base_mass_cond_scale: 0.30
+base_mass_cond_gate_init: -4.0
  
 rec_weight: 1
 grad_norm: 0.99

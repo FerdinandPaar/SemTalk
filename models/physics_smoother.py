@@ -172,7 +172,7 @@ class PhysicsSmootherSMPLX(nn.Module):
 
     # ── Inference: per-joint EMA smoothing ──────────────────────────
 
-    def smooth_poses(self, poses_rot6d, tau):
+    def smooth_poses(self, poses_rot6d, tau, initial_state=None):
         """
         Differentiable per-joint EMA:
             θ_t = (1 − τ_j) · θ_pred_t  +  τ_j · θ_{t−1}
@@ -180,21 +180,30 @@ class PhysicsSmootherSMPLX(nn.Module):
         Args:
             poses_rot6d:  [B, T, J, 6]
             tau:          [B, T, J]   (full temporal resolution)
+            initial_state: [B, J, 6]  optional seed from previous chunk
 
         Returns:
             smoothed:     [B, T, J, 6]
         """
         B, T, J, D = poses_rot6d.shape
-        out = [poses_rot6d[:, 0]]                           # keep first frame as-is
+        if initial_state is not None:
+            prev = initial_state
+        else:
+            prev = poses_rot6d[:, 0]
+        out = []
 
-        for t in range(1, T):
-            tau_t = tau[:, t, :, None]                      # [B, J, 1]
-            frame = (1.0 - tau_t) * poses_rot6d[:, t] + tau_t * out[-1]
-            out.append(frame)
+        for t in range(T):
+            if t == 0 and initial_state is None:
+                out.append(poses_rot6d[:, 0])
+            else:
+                tau_t = tau[:, t, :, None]                      # [B, J, 1]
+                frame = (1.0 - tau_t) * poses_rot6d[:, t] + tau_t * prev
+                out.append(frame)
+            prev = out[-1]
 
         return torch.stack(out, dim=1)                      # [B, T, J, 6]
 
-    def forward_inference(self, poses_rot6d, gate_psi, logvar=None):
+    def forward_inference(self, poses_rot6d, gate_psi, logvar=None, initial_state=None):
         """
         Full inference smoothing pipeline.
 
@@ -202,6 +211,7 @@ class PhysicsSmootherSMPLX(nn.Module):
             poses_rot6d:  [B, T, J, 6]  decoded poses
             gate_psi:     [B, T']        semantic gate probability (soft)
             logvar:       [B, T', z]     VIB posterior log-variance
+            initial_state: [B, J, 6]     optional EMA seed from previous chunk
 
         Returns:
             smoothed:     [B, T, J, 6]
@@ -232,7 +242,7 @@ class PhysicsSmootherSMPLX(nn.Module):
         else:
             tau = tau_low
 
-        return self.smooth_poses(poses_rot6d, tau)
+        return self.smooth_poses(poses_rot6d, tau, initial_state=initial_state)
 
     # ── Training: latent-space jerk loss ────────────────────────────
 

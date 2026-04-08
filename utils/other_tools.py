@@ -961,17 +961,45 @@ def save_checkpoints(save_path, model, opt=None, epoch=None, lrs=None):
 def load_checkpoints(model, save_path, load_name='model'):
     states = torch.load(save_path)
 
-    # 假设所有权重都需要移除前缀
-    new_weights = OrderedDict((k[7:], v) if k.startswith('module.') else (k, v)
-                              for k, v in states['model_state'].items())
+    def _align_state_dict_to_model(sd):
+        model_has_module = any(k.startswith('module.') for k in model.state_dict().keys())
+        ckpt_has_module = any(k.startswith('module.') for k in sd.keys())
+        if model_has_module and not ckpt_has_module:
+            return OrderedDict((f'module.{k}', v) for k, v in sd.items())
+        if not model_has_module and ckpt_has_module:
+            return OrderedDict((k[7:] if k.startswith('module.') else k, v) for k, v in sd.items())
+        return OrderedDict(sd)
+
+    def _is_allowed_non_strict(missing, unexpected):
+        allowed_prefixes = (
+            'base_mass_cond_',
+            'module.base_mass_cond_',
+            'mass_cond_',
+            'module.mass_cond_',
+        )
+        if unexpected:
+            return False
+        for key in missing:
+            if not key.startswith(allowed_prefixes):
+                return False
+        return True
+
+    aligned_weights = _align_state_dict_to_model(states['model_state'])
 
     try:
-        model.load_state_dict(new_weights)
+        model.load_state_dict(aligned_weights)
     except RuntimeError as e:
-        # 如果权重加载出错，打印错误信息和状态字典，并尝试加载原始权重状态
-        print(f"Error occurred during loading weights: {e}")
-        print(f"Trying to load model using the original state dict.")
-        model.load_state_dict(states['model_state'])
+        # Backward-compatible fallback for targeted architecture updates only.
+        print(f"Error occurred during strict loading: {e}")
+        incompat = model.load_state_dict(aligned_weights, strict=False)
+        missing = list(getattr(incompat, 'missing_keys', []))
+        unexpected = list(getattr(incompat, 'unexpected_keys', []))
+        if not _is_allowed_non_strict(missing, unexpected):
+            raise RuntimeError(
+                f"Non-strict load rejected for {load_name}. "
+                f"Missing keys: {missing[:10]} Unexpected keys: {unexpected[:10]}"
+            ) from e
+        print("Applied guarded non-strict load for new base mass-conditioning keys.")
 
     print(f"Successfully loaded self-pretrained checkpoints for {load_name}")
 
@@ -979,16 +1007,45 @@ def load_checkpoints(model, save_path, load_name='model'):
 def load_checkpoints2(model, save_path, load_name='model'):
     states = torch.load(save_path)
 
-    # 假设所有权重都需要移除前缀
-    # new_weights = OrderedDict((k[7:], v) if k.startswith('module.') else (k, v) for k, v in states['model_state'].items())
-    new_weights = states['model_state']
+    def _align_state_dict_to_model(sd):
+        model_has_module = any(k.startswith('module.') for k in model.state_dict().keys())
+        ckpt_has_module = any(k.startswith('module.') for k in sd.keys())
+        if model_has_module and not ckpt_has_module:
+            return OrderedDict((f'module.{k}', v) for k, v in sd.items())
+        if not model_has_module and ckpt_has_module:
+            return OrderedDict((k[7:] if k.startswith('module.') else k, v) for k, v in sd.items())
+        return OrderedDict(sd)
+
+    def _is_allowed_non_strict(missing, unexpected):
+        allowed_prefixes = (
+            'base_mass_cond_',
+            'module.base_mass_cond_',
+            'mass_cond_',
+            'module.mass_cond_',
+        )
+        if unexpected:
+            return False
+        for key in missing:
+            if not key.startswith(allowed_prefixes):
+                return False
+        return True
+
+    aligned_weights = _align_state_dict_to_model(states['model_state'])
+
     try:
-        model.load_state_dict(new_weights)
+        model.load_state_dict(aligned_weights)
     except RuntimeError as e:
-        # 如果权重加载出错，打印错误信息和状态字典，并尝试加载原始权重状态
-        print(f"Error occurred during loading weights: {e}")
-        print(f"Trying to load model using the original state dict.")
-        model.load_state_dict(states['model_state'])
+        # Backward-compatible fallback for targeted architecture updates only.
+        print(f"Error occurred during strict loading: {e}")
+        incompat = model.load_state_dict(aligned_weights, strict=False)
+        missing = list(getattr(incompat, 'missing_keys', []))
+        unexpected = list(getattr(incompat, 'unexpected_keys', []))
+        if not _is_allowed_non_strict(missing, unexpected):
+            raise RuntimeError(
+                f"Non-strict load rejected for {load_name}. "
+                f"Missing keys: {missing[:10]} Unexpected keys: {unexpected[:10]}"
+            ) from e
+        print("Applied guarded non-strict load for new base mass-conditioning keys.")
 
     print(f"Successfully loaded self-pretrained checkpoints for {load_name}")
 

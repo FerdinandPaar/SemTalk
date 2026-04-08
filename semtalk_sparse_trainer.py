@@ -93,6 +93,16 @@ class CustomTrainer(train.BaseTrainer):
                 other_tools.load_checkpoints(self.semtalk_base, self.args.base_ckpt, 'semtalk_base')
             except Exception as e:
                 logger.warning(f"Failed to load base model checkpoint: {e}. Starting with an uninitialized model.")
+
+        logger.info(
+            f"[sparse_trainer] mass_cond_mode={getattr(self.args, 'mass_cond_mode', 'none')} "
+            f"mass_cond_scale={getattr(self.args, 'mass_cond_scale', 0.30)}"
+        )
+        logger.info(
+            f"[sparse_trainer] base_mass_cond_mode={getattr(self.args, 'base_mass_cond_mode', 'none')} "
+            f"base_mass_cond_scale={getattr(self.args, 'base_mass_cond_scale', 0.30)} "
+            f"joint_train_base_in_sparse={getattr(self.args, 'joint_train_base_in_sparse', False)}"
+        )
         
         
         self.args.vae_layer = 2
@@ -129,7 +139,19 @@ class CustomTrainer(train.BaseTrainer):
         self.vq_model_hands.eval()
         self.vq_model_lower.eval()
         self.global_motion.eval()
-        self.semtalk_base.eval()
+
+        self._joint_train_base = bool(getattr(self.args, "joint_train_base_in_sparse", False))
+        if self._joint_train_base:
+            self.semtalk_base.train()
+            for p in self.semtalk_base.parameters():
+                p.requires_grad = True
+            self.opt.add_param_group({"params": self.semtalk_base.parameters()})
+            logger.info("[sparse_trainer] Base module is trainable and added to optimizer")
+        else:
+            self.semtalk_base.eval()
+            for p in self.semtalk_base.parameters():
+                p.requires_grad = False
+            logger.info("[sparse_trainer] Base module frozen (eval)")
 
         self.cls_loss = nn.NLLLoss(reduction='none').to(self.rank)
         self.reclatent_loss = nn.MSELoss(reduction='none').to(self.rank)
@@ -648,6 +670,16 @@ class CustomTrainer(train.BaseTrainer):
                 in_id = in_id_tmp,
                 hubert=hubert_tmp,
                 use_attentions=True,)
+
+            latent_tmp = self.semtalk_base.forward_latent(
+                in_audio=in_beat_tmp,
+                in_word=in_word_tmp,
+                mask=mask_val,
+                in_motion=latent_all_tmp,
+                in_id=in_id_tmp,
+                hubert=hubert_tmp,
+                use_attentions=True,
+            )
             
             net_out_val = self.model(
                 in_word=in_word_tmp,
@@ -657,45 +689,33 @@ class CustomTrainer(train.BaseTrainer):
                 in_motion = latent_all_tmp,
                 in_id = in_id_tmp,
                 use_attentions=True,
-                hubert=hubert_tmp,)
+                hubert=hubert_tmp,
+                latent=latent_tmp,
+            )
             
             gate = net_out_val["gate"]
             gate_score = torch.softmax(gate, dim=-1)
             gate_psi_chunk = gate_score[:, :, 1:2]              # [B, T', 1] soft semantic prob
             gate_logvar_chunk = net_out_val.get("gate_logvar")   # [B, T', z] or None
-            gate = torch.argmax(gate_score, dim=-1).unsqueeze(-1)
-            rec_index_upper = self.log_softmax(semtalk_base_out["cls_upper"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_upper = torch.max(rec_index_upper.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-        
-            rec_index_lower = self.log_softmax(semtalk_base_out["cls_lower"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_lower = torch.max(rec_index_lower.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-        
-            rec_index_hands = self.log_softmax(semtalk_base_out["cls_hands"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_hands = torch.max(rec_index_hands.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
+            gate_hard = torch.argmax(gate_score, dim=-1).unsqueeze(-1)
+            gate_sem = gate_score[:, :, 1:2].unsqueeze(-1)      # [B, T', 1, 1]
 
-            rec_index_face = self.log_softmax(semtalk_base_out["cls_face"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_face = torch.max(rec_index_face.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
+            # Soft blend at logit level avoids discontinuity from hard switching.
+            cls_upper_mix = semtalk_base_out["cls_upper"] * (1.0 - gate_sem) + net_out_val["cls_upper"] * gate_sem
+            cls_lower_mix = semtalk_base_out["cls_lower"] * (1.0 - gate_sem) + net_out_val["cls_lower"] * gate_sem
+            cls_hands_mix = semtalk_base_out["cls_hands"] * (1.0 - gate_sem) + net_out_val["cls_hands"] * gate_sem
 
-            ####### semantic #######
-            rec_index_upper_sem = self.log_softmax(net_out_val["cls_upper"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_upper_sem = torch.max(rec_index_upper_sem.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-
-            rec_index_lower_sem = self.log_softmax(net_out_val["cls_lower"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_lower_sem = torch.max(rec_index_lower_sem.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-
-            rec_index_hands_sem = self.log_softmax(net_out_val["cls_hands"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_hands_sem = torch.max(rec_index_hands_sem.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-            
-            rec_index_upper = torch.where(gate !=0, rec_index_upper_sem, rec_index_upper)
-            rec_index_hands = torch.where(gate !=0, rec_index_hands_sem, rec_index_hands)
-            rec_index_lower = torch.where(gate !=0, rec_index_lower_sem, rec_index_lower)
+            rec_index_upper = torch.argmax(self.log_softmax(cls_upper_mix), dim=2)
+            rec_index_lower = torch.argmax(self.log_softmax(cls_lower_mix), dim=2)
+            rec_index_hands = torch.argmax(self.log_softmax(cls_hands_mix), dim=2)
+            rec_index_face = torch.argmax(self.log_softmax(semtalk_base_out["cls_face"]), dim=2)
 
             if i == 0:
                 rec_index_all_face.append(rec_index_face)
                 rec_index_all_upper.append(rec_index_upper)
                 rec_index_all_lower.append(rec_index_lower)
                 rec_index_all_hands.append(rec_index_hands)
-                sem_score.append(gate)
+                sem_score.append(gate_hard)
                 gate_psi_all.append(gate_psi_chunk)
                 if gate_logvar_chunk is not None:
                     gate_logvar_all.append(gate_logvar_chunk)
@@ -704,7 +724,7 @@ class CustomTrainer(train.BaseTrainer):
                 rec_index_all_upper.append(rec_index_upper[:, 1:])
                 rec_index_all_lower.append(rec_index_lower[:, 1:])
                 rec_index_all_hands.append(rec_index_hands[:, 1:])
-                sem_score.append(gate[:, 1:])
+                sem_score.append(gate_hard[:, 1:])
                 gate_psi_all.append(gate_psi_chunk[:, 1:])
                 if gate_logvar_chunk is not None:
                     gate_logvar_all.append(gate_logvar_chunk[:, 1:])
@@ -809,6 +829,11 @@ class CustomTrainer(train.BaseTrainer):
             )
             rec_pose = rec_pose_6d.reshape(bs, n, j * 6)
         
+        # Collect gate_psi for downstream visualisation
+        gate_psi_np = None
+        if len(gate_psi_all) > 0:
+            gate_psi_np = torch.cat(gate_psi_all, dim=1).squeeze(-1).detach().cpu().numpy()
+
         return {
             'rec_pose': rec_pose,
             'rec_trans': rec_trans,
@@ -817,6 +842,7 @@ class CustomTrainer(train.BaseTrainer):
             'tar_beta': tar_beta,
             'tar_trans': tar_trans,
             'rec_exps': rec_exps,
+            'gate_psi': gate_psi_np,
         }
     
     def train(self, epoch):
@@ -860,9 +886,12 @@ class CustomTrainer(train.BaseTrainer):
     def test(self, epoch):
         
         results_save_path = self.checkpoint_path + f"/{epoch}/"
-        if os.path.exists(results_save_path): 
-            return 0
-        os.makedirs(results_save_path)
+        if os.path.exists(results_save_path):
+            logger.warning(
+                f"[test] Skip epoch {epoch}: results already exist at {results_save_path}"
+            )
+            return None
+        os.makedirs(results_save_path, exist_ok=True)
         start_time = time.time()
         total_length = 0
         test_seq_list = self.test_data.selected_file
@@ -986,15 +1015,18 @@ class CustomTrainer(train.BaseTrainer):
                     gender='neutral',
                     mocap_frame_rate = 30 ,
                 )
-                np.savez(results_save_path+"res_"+test_seq_list.iloc[its]['id']+'.npz',
+                save_kwargs = dict(
                     betas=gt_npz["betas"],
                     poses=rec_pose_np,
                     expressions=rec_exp_np,
                     trans=rec_trans_np,
                     model='smplx2020',
                     gender='neutral',
-                    mocap_frame_rate = 30,
+                    mocap_frame_rate=30,
                 )
+                if net_out.get('gate_psi') is not None:
+                    save_kwargs['gate_psi'] = net_out['gate_psi']
+                np.savez(results_save_path+"res_"+test_seq_list.iloc[its]['id']+'.npz', **save_kwargs)
                 total_length += n
         
         logger.info(f"l2 loss: {l2_all/total_length}")
@@ -1138,6 +1170,16 @@ class CustomTrainer(train.BaseTrainer):
                 in_id = in_id_tmp,
                 hubert=hubert_tmp,
                 use_attentions=True,)
+
+            latent_tmp = self.semtalk_base.forward_latent(
+                in_audio=in_beat_tmp,
+                in_word=in_word_tmp,
+                mask=mask_val,
+                in_motion=latent_all_tmp,
+                in_id=in_id_tmp,
+                hubert=hubert_tmp,
+                use_attentions=True,
+            )
             
             net_out_val = self.model(
                 in_word=in_word_tmp,
@@ -1147,45 +1189,32 @@ class CustomTrainer(train.BaseTrainer):
                 in_motion = latent_all_tmp,
                 in_id = in_id_tmp,
                 use_attentions=True,
-                hubert=hubert_tmp,)
+                hubert=hubert_tmp,
+                latent=latent_tmp,
+            )
             
             gate = net_out_val["gate"]
             gate_score = torch.softmax(gate, dim=-1)
             gate_psi_chunk = gate_score[:, :, 1:2]              # [B, T', 1] soft semantic prob
             gate_logvar_chunk = net_out_val.get("gate_logvar")   # [B, T', z] or None
-            gate = torch.argmax(gate_score, dim=-1).unsqueeze(-1)
-            rec_index_upper = self.log_softmax(semtalk_base_out["cls_upper"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_upper = torch.max(rec_index_upper.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-        
-            rec_index_lower = self.log_softmax(semtalk_base_out["cls_lower"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_lower = torch.max(rec_index_lower.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-        
-            rec_index_hands = self.log_softmax(semtalk_base_out["cls_hands"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_hands = torch.max(rec_index_hands.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
+            gate_hard = torch.argmax(gate_score, dim=-1).unsqueeze(-1)
+            gate_sem = gate_score[:, :, 1:2].unsqueeze(-1)      # [B, T', 1, 1]
 
-            rec_index_face = self.log_softmax(semtalk_base_out["cls_face"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_face = torch.max(rec_index_face.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
+            cls_upper_mix = semtalk_base_out["cls_upper"] * (1.0 - gate_sem) + net_out_val["cls_upper"] * gate_sem
+            cls_lower_mix = semtalk_base_out["cls_lower"] * (1.0 - gate_sem) + net_out_val["cls_lower"] * gate_sem
+            cls_hands_mix = semtalk_base_out["cls_hands"] * (1.0 - gate_sem) + net_out_val["cls_hands"] * gate_sem
 
-            ####### semantic #######
-            rec_index_upper_sem = self.log_softmax(net_out_val["cls_upper"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_upper_sem = torch.max(rec_index_upper_sem.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-
-            rec_index_lower_sem = self.log_softmax(net_out_val["cls_lower"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_lower_sem = torch.max(rec_index_lower_sem.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-
-            rec_index_hands_sem = self.log_softmax(net_out_val["cls_hands"]).reshape(-1, self.args.vae_codebook_size,6)
-            _, rec_index_hands_sem = torch.max(rec_index_hands_sem.reshape(-1, 16, self.args.vae_codebook_size,6), dim=2)
-            
-            rec_index_upper = torch.where(gate !=0, rec_index_upper_sem, rec_index_upper)
-            rec_index_hands = torch.where(gate !=0, rec_index_hands_sem, rec_index_hands)
-            rec_index_lower = torch.where(gate !=0, rec_index_lower_sem, rec_index_lower)
+            rec_index_upper = torch.argmax(self.log_softmax(cls_upper_mix), dim=2)
+            rec_index_lower = torch.argmax(self.log_softmax(cls_lower_mix), dim=2)
+            rec_index_hands = torch.argmax(self.log_softmax(cls_hands_mix), dim=2)
+            rec_index_face = torch.argmax(self.log_softmax(semtalk_base_out["cls_face"]), dim=2)
 
             if i == 0:
                 rec_index_all_face.append(rec_index_face)
                 rec_index_all_upper.append(rec_index_upper)
                 rec_index_all_lower.append(rec_index_lower)
                 rec_index_all_hands.append(rec_index_hands)
-                sem_score.append(gate)
+                sem_score.append(gate_hard)
                 gate_psi_all_inf.append(gate_psi_chunk)
                 if gate_logvar_chunk is not None:
                     gate_logvar_all_inf.append(gate_logvar_chunk)
@@ -1194,7 +1223,7 @@ class CustomTrainer(train.BaseTrainer):
                 rec_index_all_upper.append(rec_index_upper[:, 1:])
                 rec_index_all_lower.append(rec_index_lower[:, 1:])
                 rec_index_all_hands.append(rec_index_hands[:, 1:])
-                sem_score.append(gate[:, 1:])
+                sem_score.append(gate_hard[:, 1:])
                 gate_psi_all_inf.append(gate_psi_chunk[:, 1:])
                 if gate_logvar_chunk is not None:
                     gate_logvar_all_inf.append(gate_logvar_chunk[:, 1:])
@@ -1314,15 +1343,18 @@ class CustomTrainer(train.BaseTrainer):
             filename = os.path.splitext(base)[0] + f"_{timestamp}.npz"
             save_path = os.path.join("./demo", filename)
         gt_npz = np.load("demo/2_scott_0_1_1.npz", allow_pickle=True)
-        np.savez(   save_path,
-                    betas=gt_npz["betas"],
-                    poses=rec_pose_np,
-                    expressions=rec_exp_np,
-                    trans=rec_trans_np,
-                    model='smplx2020',
-                    gender='neutral',
-                    mocap_frame_rate = 30,
-                )
+        save_kwargs = dict(
+            betas=gt_npz["betas"],
+            poses=rec_pose_np,
+            expressions=rec_exp_np,
+            trans=rec_trans_np,
+            model='smplx2020',
+            gender='neutral',
+            mocap_frame_rate=30,
+        )
+        if len(gate_psi_all_inf) > 0:
+            save_kwargs['gate_psi'] = torch.cat(gate_psi_all_inf, dim=1).squeeze(-1).detach().cpu().numpy()
+        np.savez(save_path, **save_kwargs)
         print("result saved to ", save_path)
     
     def encode_text(self, raw_text, device):

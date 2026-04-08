@@ -51,7 +51,8 @@ class BaseTrainer(object):
             if self.args.stat == "ts":
                 self.writer = SummaryWriter(log_dir=args.out_path + "custom/" + args.name + args.notes + "/")
             else:
-                wandb.init(project=args.project, dir=args.out_path, name=args.name[12:] + args.notes)
+                wandb_run_name = args.wandb_name if getattr(args, "wandb_name", None) else args.name[12:] + args.notes
+                wandb.init(project=args.project, dir=args.out_path, name=wandb_run_name)
                 wandb.config.update(args)
                 self.writer = None 
         if args.train_rvq:

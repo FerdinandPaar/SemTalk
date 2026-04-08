@@ -36,12 +36,12 @@ distilbert_path: distilbert-base-uncased
 clip_dim: 256
 
 # data config — point to the MoCLIP-encoded cache
-training_speakers: [2] 
+training_speakers: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
 additional_data: False
 cache_path: datasets/beat2_cache_2
 dataset: semtalk_dataloader
 train_path: datasets/beat2_semtalk_train_moclip
-test_path: datasets/beat2_semtalk_test_moclip.pkl
+test_path: datasets/beat2_semtalk_test_moclip_allspk.pkl
 new_cache: False
 
 # motion config

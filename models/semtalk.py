@@ -18,6 +18,22 @@ except ImportError:
     from models.motion_encoder import *
 
 
+# De Leva mass fractions mapped to SMPL-X 55-joint layout.
+SMPLX_MASS_FRACTIONS_55 = [
+    0.1117, 0.1416, 0.1416, 0.1633, 0.0433, 0.0433, 0.1596,
+    0.0137, 0.0137, 0.1596, 0.0137, 0.0137, 0.0350, 0.0080,
+    0.0080, 0.0694, 0.0271, 0.0271, 0.0162, 0.0162, 0.0061,
+    0.0061, 0.0070, 0.0010, 0.0010,
+] + [0.0004] * 30
+
+MASS_GROUPS = {
+    "shoulder": [16, 17],
+    "forearm": [18, 19, 20, 21],
+    "arm_combined": [16, 17, 18, 19, 20, 21],
+    "core": [0, 3, 6, 9, 12],
+}
+
+
 # from .transformer import CAG
 class WavEncoder(nn.Module):
     def __init__(self, out_dim, audio_in=1):
@@ -473,7 +489,35 @@ def match_time_to(x: torch.Tensor, T_target: int) -> torch.Tensor:
 class semtalk_base(nn.Module):
     def __init__(self, args=None):
         super(semtalk_base, self).__init__()
-        self.args = args   
+        self.args = args
+
+        # Optional weight-informed conditioning for base/beat pathway.
+        # none | arm_combined_core | split_arm_core | all_joints_core
+        self._base_mass_cond_mode = str(getattr(args, 'base_mass_cond_mode', 'none')).strip().lower()
+        if self._base_mass_cond_mode not in {
+            'none', 'arm_combined_core', 'split_arm_core', 'all_joints_core'
+        }:
+            self._base_mass_cond_mode = 'none'
+        self._base_mass_cond_scale = float(getattr(args, 'base_mass_cond_scale', 0.30))
+        self._base_mass_cond_enabled = self._base_mass_cond_mode != 'none'
+        # Learnable scalar gate (sigmoid) lets the model suppress mass priors when they conflict.
+        self.base_mass_cond_gate = nn.Parameter(
+            torch.tensor(float(getattr(args, 'base_mass_cond_gate_init', -4.0)))
+        )
+
+        base_mass_vec = self._build_mass_condition_vector(self._base_mass_cond_mode)
+        self.register_buffer('base_mass_cond_vector', base_mass_vec)
+        self.base_mass_cond_proj = nn.Sequential(
+            nn.Linear(int(base_mass_vec.numel()), 256),
+            nn.LayerNorm(256),
+            nn.GELU(),
+            nn.Linear(256, 256),
+        )
+        self.base_mass_cond_hidden_proj = nn.Sequential(
+            nn.Linear(256, self.args.hidden_size),
+            nn.LayerNorm(self.args.hidden_size),
+        )
+
         ######## constractive loss ########
         self.hubert_cons_loss = RhythmicIdentificationLoss(temperature=0.1)
         self.hubert_face_cons_loss = RhythmicIdentificationLoss(temperature=0.1)
@@ -596,6 +640,39 @@ class semtalk_base(nn.Module):
 
     def _reset_parameters(self):
         nn.init.normal_(self.mask_embeddings, 0, self.args.hidden_size ** -0.5)
+
+    def _build_mass_condition_vector(self, mode):
+        if mode == 'none':
+            return torch.zeros(1, dtype=torch.float32)
+
+        mass = torch.tensor(SMPLX_MASS_FRACTIONS_55[:55], dtype=torch.float32)
+        mass = mass / mass.sum().clamp(min=1e-8)
+
+        shoulder = mass[MASS_GROUPS['shoulder']].mean()
+        forearm = mass[MASS_GROUPS['forearm']].mean()
+        arm_combined = mass[MASS_GROUPS['arm_combined']].mean()
+        core = mass[MASS_GROUPS['core']].mean()
+
+        if mode == 'arm_combined_core':
+            return torch.stack([arm_combined, core], dim=0)
+        if mode == 'split_arm_core':
+            return torch.stack([shoulder, forearm, core], dim=0)
+        if mode == 'all_joints_core':
+            return torch.cat([mass, core.unsqueeze(0)], dim=0)
+        return torch.zeros(1, dtype=torch.float32)
+
+    def _apply_base_mass_prior(self, hidden_seq):
+        if not self._base_mass_cond_enabled:
+            return hidden_seq
+        bs, t, _ = hidden_seq.shape
+        mass_feat = self.base_mass_cond_vector.view(1, 1, -1).expand(bs, t, -1)
+        mass_prior = self.base_mass_cond_proj(mass_feat)
+        # Keep mass prior projection decoupled from audio projection to avoid
+        # perturbing learned audio-to-motion alignment during finetuning.
+        mass_prior = self.base_mass_cond_hidden_proj(mass_prior)
+        gate = torch.sigmoid(self.base_mass_cond_gate)
+        scale = self._base_mass_cond_scale * gate
+        return hidden_seq + scale * mass_prior
     
     # 外部可在训练开始前注入 HuBERT 统计量（推荐）
     # @torch.no_grad()
@@ -686,6 +763,9 @@ class semtalk_base(nn.Module):
             motion_refined_embeddings_in = self.position_embeddings(motion_refined_embeddings)
             word_hints = self.wordhints_decoder(tgt=motion_refined_embeddings_in, memory=a2g_motion)
             motion_refined_embeddings = motion_refined_embeddings + word_hints
+
+        # Inject mass prior at decoder-latent stage (after audio fusion) with learnable scalar gate.
+        motion_refined_embeddings = self._apply_base_mass_prior(motion_refined_embeddings)
         
         # feedforward
         motion_refined_embeddings = motion_refined_embeddings.permute(0, 2, 1)
@@ -848,6 +928,9 @@ class semtalk_base(nn.Module):
             motion_refined_embeddings_in = self.position_embeddings(motion_refined_embeddings)
             word_hints = self.wordhints_decoder(tgt=motion_refined_embeddings_in, memory=a2g_motion)
             motion_refined_embeddings = motion_refined_embeddings + word_hints
+
+        # Keep inference path aligned with training path.
+        motion_refined_embeddings = self._apply_base_mass_prior(motion_refined_embeddings)
         
         # feedforward
         motion_refined_embeddings = motion_refined_embeddings.permute(0, 2, 1)
@@ -908,6 +991,34 @@ class semtalk_sparse(nn.Module):
     def __init__(self, args=None):
         super(semtalk_sparse, self).__init__()
         self.args = args   
+        # Optional bridge from base latents to sparse latents.
+        # When enabled, sparse can keep base rhythm on low-semantic frames
+        # while still diverging on high-semantic frames.
+        self._latent_bridge_enabled = bool(getattr(args, 'latent_bridge_enabled', False))
+        self._latent_bridge_alpha = float(getattr(args, 'latent_bridge_alpha', 0.35))
+        self._latent_bridge_alpha = max(0.0, min(1.0, self._latent_bridge_alpha))
+        self._dual_stage_cond_enabled = bool(getattr(args, 'dual_stage_cond_enabled', True))
+        self._early_cond_scale = float(getattr(args, 'early_cond_scale', 0.20))
+        self._mid_cond_scale = float(getattr(args, 'mid_cond_scale', 0.15))
+
+        # Weight-informed conditioning ablation.
+        # none | arm_combined_core | split_arm_core | all_joints_core
+        self._mass_cond_mode = str(getattr(args, 'mass_cond_mode', 'none')).strip().lower()
+        if self._mass_cond_mode not in {
+            'none', 'arm_combined_core', 'split_arm_core', 'all_joints_core'
+        }:
+            self._mass_cond_mode = 'none'
+        self._mass_cond_scale = float(getattr(args, 'mass_cond_scale', 0.30))
+        self._mass_cond_enabled = self._mass_cond_mode != 'none'
+
+        mass_vec = self._build_mass_condition_vector(self._mass_cond_mode)
+        self.register_buffer('mass_cond_vector', mass_vec)
+        self.mass_cond_proj = nn.Sequential(
+            nn.Linear(int(mass_vec.numel()), 256),
+            nn.LayerNorm(256),
+            nn.GELU(),
+            nn.Linear(256, 256),
+        )
         with open(f"{args.data_path}weights/vocab.pkl", 'rb') as f:
             self.lang_model = pickle.load(f)
             pre_trained_embedding = self.lang_model.word_embedding_weights
@@ -1030,6 +1141,26 @@ class semtalk_sparse(nn.Module):
 
     def _reset_parameters(self):
         nn.init.normal_(self.mask_embeddings, 0, self.args.hidden_size ** -0.5)
+
+    def _build_mass_condition_vector(self, mode):
+        if mode == 'none':
+            return torch.zeros(1, dtype=torch.float32)
+
+        mass = torch.tensor(SMPLX_MASS_FRACTIONS_55[:55], dtype=torch.float32)
+        mass = mass / mass.sum().clamp(min=1e-8)
+
+        shoulder = mass[MASS_GROUPS['shoulder']].mean()
+        forearm = mass[MASS_GROUPS['forearm']].mean()
+        arm_combined = mass[MASS_GROUPS['arm_combined']].mean()
+        core = mass[MASS_GROUPS['core']].mean()
+
+        if mode == 'arm_combined_core':
+            return torch.stack([arm_combined, core], dim=0)
+        if mode == 'split_arm_core':
+            return torch.stack([shoulder, forearm, core], dim=0)
+        if mode == 'all_joints_core':
+            return torch.cat([mass, core.unsqueeze(0)], dim=0)
+        return torch.zeros(1, dtype=torch.float32)
     
     def forward(self, in_word=None, feat_clip_text=None, emotion=None, mask=None, is_test=None, epoch=121, use_attentions=True, use_word=True, in_id = None, in_motion=None,hubert=None,latent=None):
 
@@ -1049,17 +1180,23 @@ class semtalk_sparse(nn.Module):
         alpha_at_body_semantic = torch.cat([feat_clip_text_body, emotion_clip_text_body], dim=-1).reshape(bs, t, c*2)
         alpha_at_body_semantic = self.at_attn_body_semantic(alpha_at_body_semantic).reshape(bs, t, c, 2)
         alpha_at_body_semantic = alpha_at_body_semantic.softmax(dim=-1)
-        # fusion_body_semantic = feat_clip_text_body * alpha_at_body_semantic[:,:,:,1] + emotion_clip_text_body * alpha_at_body_semantic[:,:,:,0]
-        fusion_body_semantic = feat_clip_text_body
+        fusion_body_semantic = feat_clip_text_body * alpha_at_body_semantic[:,:,:,1] + emotion_clip_text_body * alpha_at_body_semantic[:,:,:,0]
         bert_body_pre = self.semantic_position_embeddings(in_bert_body)
 
         body_semantic = self.semantic_body_decoder(tgt=bert_body_pre, memory=fusion_body_semantic)
         # ── Keep pure semantic for downstream (no fusion_bert leakage) ──
         body_semantic_pure = body_semantic  # [bs, t, 256] — unmixed
-        alpha_at_bert = torch.cat([body_semantic, in_word_body], dim=-1).reshape(bs, t, c*2)
+
+        # Add physics-inspired mass priors in embedding space for ablation.
+        if self._mass_cond_enabled:
+            mass_feat = self.mass_cond_vector.view(1, 1, -1).expand(bs, t, -1)
+            mass_prior = self.mass_cond_proj(mass_feat)
+            body_semantic_pure = body_semantic_pure + self._mass_cond_scale * mass_prior
+
+        alpha_at_bert = torch.cat([body_semantic_pure, in_word_body], dim=-1).reshape(bs, t, c*2)
         alpha_at_bert = self.at_attn_bert(alpha_at_bert).reshape(bs, t, c, 2)
         alpha_at_bert = alpha_at_bert.softmax(dim=-1)
-        fusion_bert = body_semantic * alpha_at_bert[:,:,:,1] + in_word_body * alpha_at_bert[:,:,:,0]
+        fusion_bert = body_semantic_pure * alpha_at_bert[:,:,:,1] + in_word_body * alpha_at_bert[:,:,:,0]
 
         # ── S-VIB gate (two-stream) ──
         if self._vib_enabled:
@@ -1089,6 +1226,10 @@ class semtalk_sparse(nn.Module):
         motion_embeddings = self.feature2motion(body_hint_body) # linear 256 to 768
         motion_embeddings = speaker_embedding_body + motion_embeddings # bs, t, 768
         motion_embeddings = self.position_embeddings(motion_embeddings) # bs, t, 768
+        if self._dual_stage_cond_enabled:
+            # Early conditioning: set trajectory manifold before motion self-encoding.
+            early_prior = self.audio_feature2motion(body_semantic)
+            motion_embeddings = motion_embeddings + self._early_cond_scale * early_prior
 
         # bi-directional self-attention
         motion_refined_embeddings = self.motion_self_encoder(motion_embeddings) 
@@ -1097,7 +1238,7 @@ class semtalk_sparse(nn.Module):
         if use_word:
             a2g_motion = self.audio_feature2motion(body_semantic) # linear 256 to 768
             motion_refined_embeddings_in = motion_refined_embeddings + speaker_embedding_body # bs, t, 768
-            motion_refined_embeddings_in = self.position_embeddings(motion_refined_embeddings)
+            motion_refined_embeddings_in = self.position_embeddings(motion_refined_embeddings_in)
             word_hints = self.wordhints_decoder(tgt=motion_refined_embeddings_in, memory=a2g_motion)
             motion_refined_embeddings = motion_refined_embeddings + word_hints
         
@@ -1112,6 +1253,20 @@ class semtalk_sparse(nn.Module):
         upper_latent = self.motion2latent_upper(motion_refined_embeddings)
         hands_latent = self.motion2latent_hands(motion_refined_embeddings)
         lower_latent = self.motion2latent_lower(motion_refined_embeddings)
+
+        if self._dual_stage_cond_enabled:
+            # Mid conditioning: inject semantic/body priors before cross-part decoding.
+            t_mid = motion_refined_embeddings.shape[1]
+            body_semantic_mid = F.adaptive_avg_pool1d(
+                body_semantic.permute(0, 2, 1), t_mid
+            ).permute(0, 2, 1)
+            body_gate_mid = F.adaptive_avg_pool1d(
+                body_gate.permute(0, 2, 1), t_mid
+            ).permute(0, 2, 1)
+            mid_prior = self.audio_feature2motion(body_semantic_mid) * body_gate_mid
+            upper_latent = upper_latent + self._mid_cond_scale * mid_prior
+            hands_latent = hands_latent + self._mid_cond_scale * mid_prior
+            lower_latent = lower_latent + self._mid_cond_scale * mid_prior
 
         upper_latent_in = upper_latent + speaker_embedding_body
         upper_latent_in = self.position_embeddings(upper_latent_in)
@@ -1150,15 +1305,25 @@ class semtalk_sparse(nn.Module):
         upper_latent = self.upper_hands_decoder(tgt = upper_latent_prezq, memory = hands_latent+lower_latent_prezq)
         lower_latent = self.lower_hands_decoder(tgt = lower_latent_prezq, memory = upper_latent_prezq+hands_latent)
 
-        # mm_upper_latent = latent['upper_latent']
-        # mm_lower_latent = latent['lower_latent']
-        # mm_hands_latent = latent['hands_latent']
         body_gate = body_gate.reshape(bs, t//4, 4, 1)
         body_gate = body_gate.mean(dim=2)
-        # if epoch > -1:
-        #     upper_latent = upper_latent * body_gate + mm_upper_latent * (1 - body_gate)
-        #     hands_latent = hands_latent * body_gate + mm_hands_latent * (1 - body_gate)
-        #     lower_latent = lower_latent * body_gate + mm_lower_latent * (1 - body_gate)
+
+        # Base-to-sparse latent bridge (bounded bold change).
+        # mix = alpha * (1 - semantic_gate): strong base guidance on non-semantic chunks.
+        if self._latent_bridge_enabled and latent is not None:
+            mm_upper_latent = latent.get('upper_latent', None)
+            mm_hands_latent = latent.get('hands_latent', None)
+            mm_lower_latent = latent.get('lower_latent', None)
+            if (
+                mm_upper_latent is not None and mm_hands_latent is not None and mm_lower_latent is not None
+                and mm_upper_latent.shape == upper_latent.shape
+                and mm_hands_latent.shape == hands_latent.shape
+                and mm_lower_latent.shape == lower_latent.shape
+            ):
+                bridge_mix = (1.0 - body_gate) * self._latent_bridge_alpha
+                upper_latent = upper_latent * (1.0 - bridge_mix) + mm_upper_latent * bridge_mix
+                hands_latent = hands_latent * (1.0 - bridge_mix) + mm_hands_latent * bridge_mix
+                lower_latent = lower_latent * (1.0 - bridge_mix) + mm_lower_latent * bridge_mix
 
 
         zq_index0_lower = self.lower_classifier(lower_latent)

@@ -630,8 +630,11 @@ class CustomTrainer(train.BaseTrainer):
     def test(self, epoch):
         results_save_path = self.checkpoint_path + f"/{epoch}/"
         if os.path.exists(results_save_path):
-            return 0
-        os.makedirs(results_save_path)
+            logger.warning(
+                f"[test] Skip epoch {epoch}: results already exist at {results_save_path}"
+            )
+            return None
+        os.makedirs(results_save_path, exist_ok=True)
         start_time = time.time()
         total_length = 0
         test_seq_list = self.test_data.selected_file

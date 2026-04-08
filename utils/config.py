@@ -321,6 +321,29 @@ def parse_args():
     parser.add("--use_flow_matching", default=False, type=str2bool)
     parser.add("--fm_base_ckpt", default=None, type=str)
 
+    # Base-to-sparse latent bridge
+    parser.add("--latent_bridge_enabled", default=False, type=str2bool)
+    parser.add("--latent_bridge_alpha", default=0.35, type=float)
+
+    # Weight-informed embedding ablation in sparse semantic pathway
+    # none | arm_combined_core | split_arm_core | all_joints_core
+    parser.add("--mass_cond_mode", default="none", type=str)
+    parser.add("--mass_cond_scale", default=0.30, type=float)
+
+    # Optional weight-informed conditioning in base/beat pathway
+    # none | arm_combined_core | split_arm_core | all_joints_core
+    parser.add("--base_mass_cond_mode", default="none", type=str)
+    parser.add("--base_mass_cond_scale", default=0.30, type=float)
+    parser.add("--base_mass_cond_gate_init", default=-4.0, type=float)
+
+    # Jointly update base module during sparse training
+    parser.add("--joint_train_base_in_sparse", default=False, type=str2bool)
+
+    # Dual-stage semantic conditioning
+    parser.add("--dual_stage_cond_enabled", default=True, type=str2bool)
+    parser.add("--early_cond_scale", default=0.20, type=float)
+    parser.add("--mid_cond_scale", default=0.15, type=float)
+
     # S-VIB (Semantic Variational Information Bottleneck)
     parser.add("--vib_enabled", default=True, type=str2bool)
     parser.add("--vib_z_dim", default=16, type=int)
@@ -338,6 +361,16 @@ def parse_args():
     parser.add("--phys_lambda", default=0.01, type=float)
     parser.add("--phys_warmup_start", default=30, type=int)
     parser.add("--phys_warmup_end", default=80, type=int)
+
+    # Base-stage (beat/base trainer) physics smoother.
+    # Kept separate from sparse-stage physics to allow controlled ablations.
+    parser.add("--base_phys_enabled", default=False, type=str2bool)
+    parser.add("--base_phys_tau_base", default=0.50, type=float)
+    parser.add("--base_phys_tau_floor", default=0.10, type=float)
+    parser.add("--base_phys_alpha", default=1.0, type=float)
+    parser.add("--base_phys_lambda", default=0.01, type=float)
+    parser.add("--base_phys_warmup_start", default=30, type=int)
+    parser.add("--base_phys_warmup_end", default=80, type=int)
   
     
     args = parser.parse_args()

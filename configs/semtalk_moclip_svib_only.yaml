@@ -5,7 +5,7 @@ stat: wandb
 pre_frames: 4
 root_path: ./
 out_path: ./outputs/
-project: semtalk_svib_phys
+project: semtalk_svib_only_ablation
 data_path: ./BEAT2/beat_english_v2.0.0/
 e_path:  weights/AESKConv_240_100.bin
 eval_model: motion_representation
@@ -133,8 +133,8 @@ dual_stage_cond_enabled: true
 early_cond_scale: 0.20
 mid_cond_scale: 0.15
 
-# ── Physics Smoother (gate-modulated per-joint EMA) ──
-phys_enabled: true
+# ── Physics Smoother (DISABLED for S-VIB-only ablation) ──
+phys_enabled: false
 phys_tau_base: 0.50
 phys_tau_floor: 0.10
 phys_alpha: 1.0

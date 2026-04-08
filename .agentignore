@@ -1,0 +1,110 @@
+# .agentignore - Files and directories for AI agents to ignore
+# This helps agents focus on relevant, current code for ICCV 2025
+
+# ===== OLD/DEPRECATED CODE =====
+# Flow Matching (FM) - old experiment, not current focus
+flowmatch_base_trainer.py
+models/flow_matching_base.py
+configs/semtalk_flowmatch_base.yaml
+configs/semtalk_fm_sparse.yaml
+tests/test_fm_integration.py
+
+# Old/deprecated trainers (RVQ-VAE parts training)
+ae_trainer.py
+aeface_trainer.py
+aelower_trainer.py
+aelowerfoot_trainer.py
+
+# Old VQ-VAE configs (deprecated individual body part training)
+configs/cnn_vqvae_*.yaml
+configs/skcnn_ae.yaml
+
+# Deprecated model components (old implementations)
+models/residual_vq.py
+models/encdec.py
+models/motion_encoder.py
+models/motion_representation.py
+
+# ===== OLD RUN SCRIPTS =====
+# Outdated sweep and experiment scripts
+run_sweep_svib_phys_10.sh
+run_sweep_svib_phys_10_r05base.sh
+run_finetune_moclip_4gpu.sh
+run_gen_test_moclip.sh
+run_inference_push.sh
+submit_inference.sh
+submit_train.sh
+run_train_moclip_4gpu.sh
+
+# ===== OUTPUTS & LOGS =====
+# Training outputs and logs (too noisy for agent context)
+outputs/**
+!outputs/.gitkeep
+nohup.out
+*.log
+
+# Exclude ALL old training runs (keep agent focused on code, not results)
+outputs/custom/0128_*
+outputs/custom/0129_*
+outputs/custom/0215_*
+outputs/custom/0216_*
+outputs/custom/0217_*
+
+# ===== DATASETS & WEIGHTS =====
+# Large data files (not code to analyze)
+BEAT2/
+datasets/
+weights/
+demo/
+facebook/
+audio_cache/
+
+# ===== CACHE & BUILD ARTIFACTS =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.npz
+*.npy
+*.mdb
+lock
+*.pt
+*.pth
+*.bin
+
+# ===== EXTERNAL/VENDOR =====
+# Third-party code (Systran, etc.)
+Systran/
+
+# ===== ENVIRONMENT & CONFIG =====
+.venv/
+venv/
+ENV/
+env/
+.env/
+.DS_Store
+Thumbs.db
+*.swp
+
+# ===== IDE/EDITOR =====
+.vscode/
+.idea/
+.ipynb_checkpoints/
+
+# ===== DOCUMENTATION (PDFs) =====
+# Keep README files, ignore PDFs
+*.pdf
+
+# ===== MISC =====
+emantic path from beat leakage.
+download_weights.py
+workflow_logger.py
+
+# ===== KEEP THESE (explicitly not ignored) =====
+# Current trainers: semtalk_base_trainer.py, semtalk_sparse_trainer.py
+# Current models: models/semtalk.py, models/quantizer.py, models/rvq.py, models/tools.py
+# Current configs: configs/semtalk_base.yaml, configs/semtalk_sparse.yaml, configs/semtalk_moclip_sparse*.yaml
+# Main scripts: train.py, train_torchrun.py
+# Active scripts: scripts/*.sh (except old ones listed above)
+# Docs: README*.md, models/DEVELOPMENT_LOG.md, inference_helper.md
