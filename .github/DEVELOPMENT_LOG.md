@@ -46,7 +46,18 @@ Timestamp: 2026-04-02
   - result: `fid=0.4474`, `align=0.7592`, `l1div=13.1473`
 
 - Matched control (prior OFF):
-  - run: `outputs/custom/0402_220017_semtalk_base_base_nomass_ft_stable_v2`
+  - run: `outputs/custom/0402_220017_semtalk_base_base_nomass_ft_stable_v2`swift build -c release
+Building for production...
+/Users/ferdinandpaar/cmd-smith/Sources/CommandPalette/FileSearcher.swift:167:27: error: sending 'self' risks causing data races
+165 | 
+166 |             await MainActor.run {
+167 |                 guard let self else { return }
+    |                           |- error: sending 'self' risks causing data races
+    |                           `- note: task-isolated 'self' is captured by a main actor-isolated closure. main actor-isolated uses in closure may race against later nonisolated uses
+168 |                 let items = self.buildFileItems(from: results)
+169 |                 completion(items)
+
+make: *** [build] Error 1
   - start: `weights/best_semtalk_base.bin`
   - mode: `base_mass_cond_mode=none`
   - result: `fid=0.4845`, `align=0.7615`, `l1div=12.6997`
@@ -2895,10 +2906,118 @@ the paper number but is not from the same checkpoint.
    the correct full test set for NeurIPS. The 15-seq subset is an internal
    development metric only.
 
-### Next actions
+### Next actions (SUPERSEDED — see 2026-04-08 post-mortem below)
 
-1. Generate the correct 265-sequence all-speaker test cache (fix `save_test_dataset.py` or regenerate with a different output path).
-2. Wait for svib_only (epoch ~185 of 200, ~1.5h) and 3-seed (seed 42 ~1h) to finish.
-3. Run matched 265-seq eval on all 4 ablation checkpoints.
-4. Decide on mass prior treatment: either (a) run a uniform-mass physics ablation, (b) drop mass prior as a separate claim and fold it into the physics design, or (c) if it hurts FGD, just present physics smoothing without mass weighting.
-5. Begin paper skeleton with frozen ablation table structure.
+---
+
+Timestamp: 2026-04-08 (evening)
+
+## Post-mortem: S-VIB and physics add no measurable FGD improvement
+
+### Definitive FGD statistics (all 15-seq, speaker 2)
+
+| Run | Architecture | Finetuned from | Mean FGD | Std | Best FGD | Range |
+|-----|-------------|---------------|----------|-----|----------|-------|
+| 0223_191250 | Linear gate (MoCLIP) | ep 132, 116 steps/ep | **0.428** | 0.009 | 0.4118 | 0.050 |
+| 0223_224354 | Linear gate (MoCLIP) | ep 172, 116 steps/ep | 0.433 | 0.009 | 0.4189 | 0.043 |
+| 0311_102115 | S-VIB + physics | ep 146, 29 steps/ep | **0.441** | 0.013 | 0.4137 | 0.059 |
+| 0407_235543 | S-VIB only (no phys) | ep 1 (scratch), 116 steps/ep | ~0.44 | — | 0.4188 | — |
+
+**Conclusion: S-VIB + physics has higher mean FGD (0.441) than the plain linear
+gate (0.428).** The "best" numbers (0.4118, 0.4137, 0.4188) are all within 1
+sigma of each other. The evaluation noise floor is ±0.01 FGD per epoch.
+
+### Root cause analysis
+
+**1. Semantic frames are only 10.3% of data.**
+`sem_mean > 0` for only 10.3% of timesteps in the training LMDB. The gate
+classifies a 90/10 binary split — a constant-zero predictor gets 90% accuracy.
+At inference, `gate_psi` blends `base*(1-ψ) + sparse*ψ`. Since ψ≈0 for 90% of
+frames, the sparse model output ≈ base output on 90% of the sequence. FGD is
+dominated by the base model, not the sparse additions.
+
+**2. VIB beta is invisible (0.04–0.4% of total loss).**
+
+| Run | vib_beta | KL value | KL contribution | Total loss | Fraction |
+|-----|----------|----------|-----------------|-----------|----------|
+| svib_only | 0.001 | 2.5 | 0.0025 | ~6.0 | 0.04% |
+| s01_base_r05 | 0.010 | 1.19 | 0.012 | ~3.0 | 0.4% |
+
+The bottleneck never constrains anything. S-VIB = linear gate in practice.
+
+**3. Training uses GT labels for loss weighting, not predicted gate.**
+Lines 307-312 in `semtalk_sparse_trainer.py`:
+```python
+gate_expanded = sem_mean.unsqueeze(...)  # GT label, NOT predicted gate
+loss_latent = loss_latent * gate_expanded  # Zero on 90% of frames
+```
+The sparse model gets zero training signal on non-semantic frames. The model is
+never trained to produce good motion when gate incorrectly fires.
+
+**4. Physics training jerk loss = 0.5% of total loss.**
+`phys_jerk ≈ 0.18`, `phys_beta ≈ 0.076` → contribution = 0.014 out of ~3.0
+total. Physics inference EMA works fine but the training regularization does
+nothing.
+
+**5. Unfair comparison: different starting points and durations.**
+Linear gate finetuned from ep 132 with 116 steps/ep (4× batch). S-VIB+physics
+finetuned from ep 146 with 29 steps/ep. svib_only trained from scratch.
+
+### Killed jobs
+
+- `svib_only` (5157950): killed at epoch 189/200 — S-VIB proven ineffective
+- `neurips_3seed` (5159102): killed — 3-seed S-VIB+phys architecture being replaced
+
+### Architecture redesign: contrastive margin gate
+
+**Core insight:** The gate decides WHEN semantic motion happens, but the model
+doesn't learn WHAT different motion to produce. The VIB bottleneck constrains
+the gate's information, but the gate task is trivially easy. We need to flip
+the approach: encourage the sparse model to produce DIFFERENT latents on
+semantic frames and SAME latents on non-semantic frames.
+
+**Change 1 — Margin-gated contrastive latent loss (replaces S-VIB KL):**
+```python
+delta = (sparse_latent - base_latent).pow(2).mean(dim=-1)     # [B, T']
+loss_contrast = (
+    sem_t * F.relu(margin - delta) +  # push apart on semantic frames
+    (1 - sem_t) * delta               # pull together on non-semantic
+).mean()
+g_loss_final += contrast_weight * loss_contrast
+```
+
+**Change 2 — Drop VIB architecture.** Revert to linear gate `nn.Linear(256, 2)`.
+Gate accuracy is already 99% without VIB. Linear gate has fewer parameters and
+no KL loss to tune.
+
+**Change 3 — Physics inference-only.** Keep EMA smoother at test time (it works),
+remove training jerk loss (it does nothing, saves 30% forward time).
+
+**Change 4 — Fair comparison protocol.** All experiments start from the same
+checkpoint, train same epochs, report mean±std of last 10 evals.
+
+### Experiment plan
+
+| ID | Name | Architecture | Start from | Epochs | What it tests |
+|----|------|-------------|-----------|--------|---------------|
+| A | `baseline_continued` | Linear gate, no extras | best_190.bin | 40 | True baseline with continued training |
+| B | `contrast_margin` | Linear gate + contrastive margin | best_190.bin | 40 | Does encouraging divergence on semantic frames help? |
+
+Both with physics inference-only EMA at test. Compare mean±std of last 10 evals.
+If B > A by >1 std, contrastive margin works → add 2 seeds for confirmation.
+
+### Pipeline tracking table
+
+| Step | Task | Status | Result |
+|------|------|--------|--------|
+| 1 | Implement contrastive margin loss in trainer | | |
+| 2 | Add `contrast_enabled` / `contrast_weight` / `contrast_margin` config flags | | |
+| 3 | Create config `semtalk_moclip_baseline_continued.yaml` | | |
+| 4 | Create config `semtalk_moclip_contrast_margin.yaml` | | |
+| 5 | Create fair-eval qsub script (2 runs, same node) | | |
+| 6 | Submit Exp A (baseline_continued) | | FGD mean: ___ ± ___ |
+| 7 | Submit Exp B (contrast_margin) | | FGD mean: ___ ± ___ |
+| 8 | Compare A vs B: is delta > 1 std? | | YES / NO |
+| 9 | If YES: submit 2 more seeds for B | | FGD 3-seed: ___ ± ___ |
+| 10 | Run 265-seq all-speaker eval on winner | | FGD allspk: ___ |
+| 11 | Freeze ablation table for paper | | |
