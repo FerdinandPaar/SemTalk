@@ -1,12 +1,19 @@
-## Experiment C — S-VIB + Physics with TUNED hyperparameters
-## Key fixes vs original:
-##   vib_beta_target: 0.001 → 0.5   (KL now ~8% of total loss vs 0.016%)
-##   phys_lambda:     0.01  → 1.0   (jerk now ~6% of total loss vs 0.06%)
-##   gate_class_weight: 9.0          (compensates 10:1 non-sem:sem imbalance)
-##   vib_warmup_start: 20 → 5        (VIB engages early, not after model has converged)
-##   phys_warmup_start: 30 → 5       (physics engages early too)
-## Hypothesis: with these corrections, VIB bottleneck + physics jerk loss are
-## visible to the optimizer and can produce measurable FGD improvement.
+## Experiment C — S-VIB + Physics with EVIDENCE-BACKED hyperparameters
+## Source: P1+P2+P3 fine-tune run (2026-03-08, 0308_220319)
+##   These exact values produced FGD 0.4153 at epoch 126 — beat vanilla baseline 0.4189
+##   (see DEVELOPMENT_LOG.md §[2026-03-09] FGD Subset Evaluation)
+## Key fixes vs the FAILED original (0311_102115, mean FGD 0.441):
+##   vib_beta_target: 0.001 → 0.010  (P3 — proven to work: KL ≈ 8% of CE)
+##   phys_lambda:     0.01  → 0.08   (P2 — proven to work: pose-level jerk 15-20x drop)
+##   gate_class_weight: 9.0           (new — compensates 10:1 non-sem:sem imbalance)
+##   vib_free_bits:   0.5  → 0.20    (P3 — tighter floor for earlier KL signal)
+##   vib_warmup_start: 20 → 5        (VIB engages early; proven not to destabilize)
+##   phys_warmup_start: 30 → 5       (physics engages early)
+## Why the first S-VIB run failed (0311_102115): it had 29 steps/ep (4x less gradient
+## updates per epoch than the 116 steps/ep linear gate run) AND started from a
+## late/suboptimal checkpoint. This config starts from best_190 (better than best_116).
+## NOTE: beta=0.5 and lambda=1.0 are NOT used here — those values are untested.
+## The evidence supports 0.010 and 0.08 as the correct magnitudes.
 is_train: True
 ddp: True
 gpus: [0]
@@ -106,13 +113,13 @@ trainer: semtalk_sparse
 hidden_size: 768
 n_layer: 1
 
-# ── S-VIB ON — beta TUNED so KL ≈ 8% of total loss ──
+# ── S-VIB ON — beta from P3 (proven to work: FGD 0.4153 at ep126) ──
 vib_enabled: true
 vib_z_dim: 16
-vib_beta_target: 0.5       # was 0.001 — now KL contributes ~0.25 vs total ~3.0
-vib_warmup_start: 5        # was 20 — engage before convergence
+vib_beta_target: 0.010     # P3 value — KL ≈ 0.012 vs CE ≈ 0.6 nats (2%); proven stable
+vib_warmup_start: 5        # engage before convergence (was 20)
 vib_warmup_end: 40         # was 100
-vib_free_bits: 0.5
+vib_free_bits: 0.20        # P3 value — tighter floor vs original 0.5
 
 # ── Gate class imbalance fix: weight class-1 (semantic) ──
 # Training data: ~10.3% semantic frames → weight 1:(9) corrects imbalance
@@ -137,15 +144,15 @@ dual_stage_cond_enabled: true
 early_cond_scale: 0.20
 mid_cond_scale: 0.15
 
-# ── Physics: training jerk loss ON with TUNED lambda ──
+# ── Physics: training jerk loss ON with P2 lambda (proven to work) ──
 phys_enabled: true
 phys_train_enabled: true
 phys_tau_base: 0.50
 phys_tau_floor: 0.10
 phys_alpha: 1.0
-phys_lambda: 1.0           # was 0.01 — now jerk contributes ~0.18 vs total ~3.0
-phys_warmup_start: 5       # was 30 — engage early
-phys_warmup_end: 30        # was 80
+phys_lambda: 0.08          # P2 value — confirmed 15-20x jerk reduction; proven stable
+phys_warmup_start: 5       # engage early
+phys_warmup_end: 30
 
 rec_weight: 1
 grad_norm: 0.99
