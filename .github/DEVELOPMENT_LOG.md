@@ -3620,8 +3620,9 @@ All rows use speaker 2 (Scott), 15-sequence subset FGD unless noted.
 | SemTalk sparse | ✗ | ✗ | ✗ | ~0.428 | — | — | — | — | Published sparse (released ckpt) |
 | + MoCLIP (old trainer) | ✓ | ✗ | ✗ | **0.4118** | — | — | — | — | `0223_191250/best_149`, linear gate, Feb codebase †|
 | + MoCLIP (current trainer) | ✓ | ✗ | ✗ | 0.4163 | 0.7648 | 12.812 | — | — | F3, `0410_003629`, linear gate, fully collapsed ψ≈1 |
-| + MoCLIP (gate_abl_A, no phys) | ✓ | ✗ | ✗ | 0.4128 ⚑ | 0.7679 | 12.438 | — | — | `gate_abl_A_no_vib`, job 5174933, ep202/264 interim |
-| + MoCLIP + S-VIB (gate_abl_B) | ✓ | ✗ | ✓ | 🏃 running | — | — | — | — | `gate_abl_B_with_vib`, job 5174933, β=0.05, ~80 ep |
+| + MoCLIP (gate_abl_A, no phys) | ✓ | ✗ | ✗ | **0.4056** 🏆 | 0.7649 | 12.426 | — | — | `gate_abl_A_no_vib`, 80 ep, best_242. New SoTA. |
+| + MoCLIP + S-VIB (gate_abl_B) | ✓ | ✗ | ✓ | 0.4393 | 0.7695 | 13.065 | — | — | `gate_abl_B_with_vib`, β=0.05, best@ep218. Gate still ψ≈0.998. |
+| + MoCLIP + gate-complementary phys | ✓ | ✓ (1-ψ) | ✗ | 🏃 running | — | — | — | — | gate_abl_C, `phys_gate_grad=true`, upper-only, λ=0.01 |
 | + MoCLIP + Physics (arm) + S-VIB | ✓ | ✓ arm | ✓ | 0.4180 | 0.7454 | 12.622 | — | — | K1 `0411_230216`, β=0.05, gate_smooth=0.25, 80 ep |
 | + MoCLIP + Physics (full) + S-VIB | ✓ | ✓ full | ✓ | 0.4137 | **0.746** | **12.46** | — | — | `s01_base_r05/best_184`, β=0.01, 184 ep ‡ |
 
@@ -3646,24 +3647,43 @@ all three metrics measured.
 
 ### Missing cells and when they will be filled
 
-| Missing cell | Experiment | ETA |
+| Missing cell | Experiment | Status |
 |---|---|---|
-| gate_abl_A final FGD/BC/DIV | job 5174933 running, ~15 min to A finish | interim 0.4128/0.7679/12.44 @ep202 |
-| gate_abl_B FGD/BC/DIV | job 5174933, starts after A ~09:45 | ~2–3 h after A done |
-| MSE / LVD for any row | run `utils/run_fair_semtalk_eval.py` on best ckpts | after A/B finish |
-| Physics (arm) + no VIB row | not yet submitted | after A/B results |
+| gate_abl_B final FGD/BC/DIV | job 5174933, B running | partial: best FGD 0.4393 @ep218, gate still ψ≈0.998 |
+| gate_abl_C FGD/BC/DIV | to submit after B finishes | `submit_gate_abl_C.sh`, configs/gate_abl_C_gate_phys.yaml |
+| MSE / LVD for any row | run `utils/run_fair_semtalk_eval.py` on best ckpts | after A/B/C finish |
 
-### Interpretation (partial, Apr 12)
+### Interpretation (updated Apr 13)
 
-- **MoCLIP contribution** (row 3 vs row 1/2): ~0.016–0.062 FGD improvement. Largest
-  single factor. Confirmed robust across trainer versions.
-- **S-VIB contribution** (gate_abl_A vs gate_abl_B): **pending** — this is exactly
-  what job 5172820 is designed to answer with a clean single-variable comparison.
-- **Physics contribution**: gate stabilisation with arm-only physics (K1 = 0.4180) is
-  better than no physics (I2/J2 = 0.4214–0.4216). Delta = ~0.003 FGD. Marginal but
-  consistent direction. Full-body physics (s01 = 0.4137) confounded by β=0.01 and
-  trainer version difference.
-- **Gate_smooth**: costs ~0.003–0.005 FGD vs no-smooth runs. Stability mechanism only,
-  not an FGD improvement. Do not claim as a contribution.
+- **MoCLIP contribution** (gate_abl_A vs SemTalk base): **0.4056 vs ~0.430 = 0.024 FGD improvement.** This is the dominant single factor. Confirmed robust across trainer versions. The MoCLIP embedding provides rich semantic content that conditions gesture generation beyond what HuBERT alone captures.
 
-*Update this table when gate_abl_A/B results are available.*
+- **S-VIB contribution** (gate_abl_A vs gate_abl_B): **gate_abl_A FGD=0.4056, gate_abl_B best=0.4393.** VIB actually HURTS FGD by ~0.034. Both runs have gate ψ≈0.998 (multiplied fusion still collapses gate). VIB adds KL overhead that seemingly disrupts MoCLIP conditioning. **Verdict: S-VIB as currently implemented is not worth it.**
+
+- **Physics contribution** (gate_abl_C, pending): Physics with `(1-ψ)` per-frame weighting (gate-complementary) lets gradient flow through ψ. Expected: helps gate differentiate beat vs semantic frames, potential FGD improvement and more diverse ψ distribution.
+
+- **Physics contribution** (old regime): gate stabilisation with arm-only physics (K1 = 0.4180) is better than no physics (I2/J2 = 0.4214–0.4216). Delta = ~0.003 FGD. Marginal but consistent when VIB is also present.
+
+- **Gate_smooth**: costs ~0.003–0.005 FGD vs no-smooth runs. Stability mechanism only, not an FGD improvement. Do not claim as a contribution.
+
+- **New SoTA**: gate_abl_A at **FGD 0.4056** — MoCLIP only, no VIB, no physics, 80 fine-tune epochs from best_184. Gate activation: ψ≈0.998 (collapsed, all-semantic). The checkpoint is saved as `weights/best_gate_abl_A_fgd0406.bin`.
+
+### Gate Architecture: What the gate decides on
+
+The S-VIB gate decides based on two streams:
+1. **Semantic stream**: `body_semantic_pure` [B,T//4,256] — MoCLIP embedding of the current motion window
+2. **Timing stream**: HuBERT features projected to 64d bottleneck — speech rhythm and prosodic context
+
+Both are combined in `SemanticVIB`: fc_mu/fc_logvar (320→16d), reparameterize → z(16d) → classifier (16→2) → softmax → ψ = P(class=semantic).
+
+**Training target**: `sem_label = (sem_mean > 0).long()` where `sem_mean` is 4-frame averaged BEAT2 `sem` annotation. **This includes BOTH beat and semantic gesture frames** — a known label leakage bug. The gate is trained to fire on any gesture frame, not purely semantic ones. Fixing this (`sem_label = (sem_mean == 2)` for BEAT2 semantic class) may improve gate discrimination.
+
+**BEAT2 annotation rates** (from prior analysis):
+- ~5–15% of frames are true semantic gestures (McNeill 1992)
+- ~30–50% are beat gestures  
+- Remainder: no gesture
+
+**Current behavior**: ψ≈0.998 everywhere — gate collapsed because `body_semantic * ψ` means ψ=0 kills all semantic info → decoder catastrophically fails → always ψ=1.
+
+**Experiment C test**: Can `(1-ψ) * jerk` gradient teach the gate to lower ψ on beat frames?
+
+*Update this table when gate_abl_C results are available.*

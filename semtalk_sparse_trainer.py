@@ -197,6 +197,8 @@ class CustomTrainer(train.BaseTrainer):
         # Option 1: fused latent jerk (gate-blended sparse+base latent, no decoder pass)
         self._phys_fused_latent = getattr(args, 'phys_fused_latent', False)
         self._phys_fused_lambda = getattr(args, 'phys_fused_lambda', 0.10)
+        # Gate-complementary physics: weight jerk by (1-ψ), gradient flows through ψ
+        self._phys_gate_grad = getattr(args, 'phys_gate_grad', False)
         # Option 3: gate temporal smoothing (penalises abrupt ψ transitions)
         self._gate_smooth_weight = getattr(args, 'gate_smooth_weight', 0.0)
         self._gate_mean_weight = getattr(args, 'gate_mean_weight', 0.0)
@@ -454,28 +456,46 @@ class CustomTrainer(train.BaseTrainer):
             n_joints_lower = len(LOWER_JOINT_IDX)   # 9
             dec_lower_6d = dec_lower[:, :, :(n_joints_lower * 6)].reshape(B_d, T_dec, n_joints_lower, 6)
 
-            # Gate ψ — detached so physics loss does NOT pull gate toward semantic
-            gate_psi_det = gate_class_pred_val[:, :, 1:2].detach()           # [B, T', 1]
-            logvar_det = net_out_val["gate_logvar"].detach() if self._vib_enabled else None
-
-            # τ for all 55 joints at T' resolution  →  [B, T', 55]
-            tau_all = self.physics_smoother.compute_tau(gate_psi_det, logvar_det)
-
-            # Select per-part τ and upsample from T' → T_dec via nearest-neighbour
-            tau_upper_tp = tau_all[:, :, UPPER_JOINT_IDX]  # [B, T', 13]
-            tau_hands_tp = tau_all[:, :, HANDS_JOINT_IDX]  # [B, T', 30]
-            tau_lower_tp = tau_all[:, :, LOWER_JOINT_IDX]  # [B, T', 9]
-
-            if T_dec != tau_all.shape[1]:
-                # F.interpolate expects [B, C, T]; we have [B, T', J]
-                tau_upper = torch.nn.functional.interpolate(
-                    tau_upper_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 13]
-                tau_hands = torch.nn.functional.interpolate(
-                    tau_hands_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 30]
-                tau_lower = torch.nn.functional.interpolate(
-                    tau_lower_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 9]
+            if self._phys_gate_grad:
+                # ── Gate-complementary physics (Experiment C) ─────────────────
+                # Weight = (1 − ψ): jerk penalty is strong on beat frames (ψ↓)
+                # and weak on semantic frames (ψ↑).  Gradient flows through ψ so
+                # the gate learns to lower ψ on frames where semantic would be jerky.
+                gate_psi_w = gate_class_pred_val[:, :, 1:2]          # [B, T', 1] — NOT detached
+                beat_w_tp = 1.0 - gate_psi_w                          # [B, T', 1]
+                if T_dec != beat_w_tp.shape[1]:
+                    beat_w_td = torch.nn.functional.interpolate(
+                        beat_w_tp.permute(0, 2, 1), size=T_dec, mode='nearest'
+                    ).permute(0, 2, 1)                                 # [B, T_dec, 1]
+                else:
+                    beat_w_td = beat_w_tp                              # [B, T', 1]
+                tau_upper = beat_w_td.expand(-1, -1, n_joints_upper)  # [B, T_dec, 13]
+                tau_hands = beat_w_td.expand(-1, -1, n_joints_hands)  # [B, T_dec, 30]
+                tau_lower = beat_w_td.expand(-1, -1, n_joints_lower)  # [B, T_dec, 9]
             else:
-                tau_upper, tau_hands, tau_lower = tau_upper_tp, tau_hands_tp, tau_lower_tp
+                # ── Original τ-weighted physics (detached gate) ───────────────
+                # Gate ψ — detached so physics loss does NOT pull gate toward semantic
+                gate_psi_det = gate_class_pred_val[:, :, 1:2].detach()   # [B, T', 1]
+                logvar_det = net_out_val["gate_logvar"].detach() if self._vib_enabled else None
+
+                # τ for all 55 joints at T' resolution  →  [B, T', 55]
+                tau_all = self.physics_smoother.compute_tau(gate_psi_det, logvar_det)
+
+                # Select per-part τ and upsample from T' → T_dec via nearest-neighbour
+                tau_upper_tp = tau_all[:, :, UPPER_JOINT_IDX]  # [B, T', 13]
+                tau_hands_tp = tau_all[:, :, HANDS_JOINT_IDX]  # [B, T', 30]
+                tau_lower_tp = tau_all[:, :, LOWER_JOINT_IDX]  # [B, T', 9]
+
+                if T_dec != tau_all.shape[1]:
+                    # F.interpolate expects [B, C, T]; we have [B, T', J]
+                    tau_upper = torch.nn.functional.interpolate(
+                        tau_upper_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 13]
+                    tau_hands = torch.nn.functional.interpolate(
+                        tau_hands_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 30]
+                    tau_lower = torch.nn.functional.interpolate(
+                        tau_lower_tp.permute(0,2,1), size=T_dec, mode='nearest').permute(0,2,1)  # [B, T_dec, 9]
+                else:
+                    tau_upper, tau_hands, tau_lower = tau_upper_tp, tau_hands_tp, tau_lower_tp
 
             # Physics jerk loss — arm_combined_core validated on GT:
             # only upper body (spine + arms + wrists) benefits from physics prior.
