@@ -1,0 +1,2001 @@
+WARNING:__main__:
+*****************************************
+Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+*****************************************
+[rank 0] CUDA_VISIBLE_DEVICES=0,1,2,3  device_count=4
+[rank 0] set_device(0)  device=0
+ 04-13 07:45:44 | {'a_encoder': None,
+ 'a_fix_pre': False,
+ 'a_pre_encoder': None,
+ 'acc_weight': 0.0,
+ 'addHubert': False,
+ 'additional_data': False,
+ 'adv_weight': 20.0,
+ 'ali_weight': 0.0,
+ 'amsgrad': False,
+ 'apex': False,
+ 'asmr': 0.0,
+ 'atcont': 0.0,
+ 'atmr': 0.0,
+ 'aud_prob': 1.0,
+ 'audio_dims': 1,
+ 'audio_f': 256,
+ 'audio_fps': 16000,
+ 'audio_infer_path': 'demo/2_scott_0_1_1.wav',
+ 'audio_norm': False,
+ 'audio_rep': 'onset+amplitude',
+ 'audio_sr': 16000,
+ 'base_ckpt': './weights/best_semtalk_base.bin',
+ 'base_mass_cond_gate_init': -4.0,
+ 'base_mass_cond_mode': 'none',
+ 'base_mass_cond_scale': 0.3,
+ 'base_phys_alpha': 1.0,
+ 'base_phys_enabled': False,
+ 'base_phys_lambda': 0.01,
+ 'base_phys_tau_base': 0.5,
+ 'base_phys_tau_floor': 0.1,
+ 'base_phys_warmup_end': 80,
+ 'base_phys_warmup_start': 30,
+ 'batch_size': 64,
+ 'beat_align': True,
+ 'benchmark': True,
+ 'cache_only': False,
+ 'cache_path': 'datasets/beat2_cache_2',
+ 'cf': 0.0,
+ 'ch': 0.0,
+ 'cl': 0.0,
+ 'clean_final_seconds': 0,
+ 'clean_first_seconds': 0,
+ 'clip_dim': 256,
+ 'clip_version': 'ViT-B/32',
+ 'config': 'configs/gate_abl_A_no_vib.yaml',
+ 'contrast_enabled': False,
+ 'contrast_margin': 0.5,
+ 'contrast_weight': 0.1,
+ 'csv_name': 'a2g_0',
+ 'cu': 0.0,
+ 'cudnn_enabled': True,
+ 'd_lr_weight': 0.2,
+ 'd_name': None,
+ 'data_path': './BEAT2/beat_english_v2.0.0/',
+ 'data_path_1': './BEAT2/pretrained/',
+ 'dataset': 'semtalk_dataloader',
+ 'ddp': True,
+ 'debug': False,
+ 'decay_epochs': 999,
+ 'decay_rate': 0.3,
+ 'decode_fusion': None,
+ 'deterministic': True,
+ 'disable_filtering': False,
+ 'distilbert_path': 'distilbert-base-uncased',
+ 'div_reg_weight': 0.0,
+ 'dropout_prob': 0.3,
+ 'dual_stage_cond_enabled': True,
+ 'e_name': 'VAESKConv',
+ 'e_path': 'weights/AESKConv_240_100.bin',
+ 'early_cond_scale': 0.2,
+ 'emo_rep': None,
+ 'emotion_dims': 8,
+ 'emotion_f': 0,
+ 'epoch_stage': 0,
+ 'epochs': 264,
+ 'eval_model': 'motion_representation',
+ 'f_encoder': 'null',
+ 'f_fix_pre': False,
+ 'f_pre_encoder': 'null',
+ 'fac_prob': 1.0,
+ 'facial_dims': 100,
+ 'facial_f': 0,
+ 'facial_fps': 15,
+ 'facial_norm': False,
+ 'facial_rep': 'smplxflame_30',
+ 'fid_weight': 0.0,
+ 'finger_net': 'original',
+ 'fm_base_ckpt': None,
+ 'freeze_wordembed': False,
+ 'fsmr': 0.0,
+ 'ftmr': 0.0,
+ 'fuse_dropout_p': 0.02,
+ 'fusion_mode': 'sum',
+ 'g_name': 'semtalk_svib_phys',
+ 'g_name_1d': 'CaMN',
+ 'g_name_1d_s': 'CaMN',
+ 'g_name_1d_t': 'CaMN',
+ 'g_name_2d': 'CaMN',
+ 'gap_weight': 0.0,
+ 'gate_class_weight': 1.0,
+ 'gate_mean_weight': 0.0,
+ 'gate_smooth_weight': 0.0,
+ 'gpus': [0, 1, 2, 3],
+ 'grad_norm': 0.99,
+ 'guide': False,
+ 'hidden_size': 768,
+ 'hubert_featdrop_p': 0.02,
+ 'hubert_freemask_n': 1,
+ 'hubert_mean_path': 'weights/hubert_mean_2_scott.npy',
+ 'hubert_noise_sigma': 0.01,
+ 'hubert_std_path': 'weights/hubert_std_2_scott.npy',
+ 'hubert_timemask_w': 2,
+ 'id_rep': 'onehot',
+ 'inference': False,
+ 'input_context': 'both',
+ 'is_train': True,
+ 'ita_weight': 0.0,
+ 'iwa_weight': 0.0,
+ 'joint_train_base_in_sparse': False,
+ 'kld_aud_weight': 0.0,
+ 'kld_fac_weight': 0.0,
+ 'kld_weight': 0.0,
+ 'kst_mode': 's',
+ 'l': 4,
+ 'laf': 0.0,
+ 'lah': 0.0,
+ 'lal': 0.0,
+ 'latent_bridge_alpha': 0.45,
+ 'latent_bridge_enabled': True,
+ 'latent_loss_mode': 'pred_gate',
+ 'lau': 0.0,
+ 'lf': 0.0,
+ 'lh': 0.0,
+ 'll': 0.0,
+ 'load_ckpt': 'outputs/custom/0311_102115_s01_base_r05_r05base_s01_base_r05_b0.010_fb0.30_pl0.08_tb0.50_tf0.10/best_184.bin',
+ 'loader_workers': 0,
+ 'local_rank': None,
+ 'log_period': 100,
+ 'loss_contrastive_neg_weight': 0.005,
+ 'loss_contrastive_pos_weight': 0.2,
+ 'loss_gan_weight': 5.0,
+ 'loss_kld_weight': 0.1,
+ 'loss_physical_weight': 0.0,
+ 'loss_reg_weight': 0.05,
+ 'loss_regression_weight': 70.0,
+ 'lr': 0.0001,
+ 'lr_base': 0.0001,
+ 'lr_min': 1e-07,
+ 'lr_policy': 'step',
+ 'lu': 0.0,
+ 'lvf': 0.0,
+ 'lvh': 0.0,
+ 'lvl': 0.0,
+ 'lvu': 0.0,
+ 'm_decoder': None,
+ 'm_encoder': 'null',
+ 'm_fix_pre': False,
+ 'm_pre_encoder': 'null',
+ 'mask_ratio': 0.875,
+ 'mass_cond_mode': 'none',
+ 'mass_cond_scale': 0.3,
+ 'mean_pose_path': '/datasets/trinity/train/',
+ 'mf': 0.0,
+ 'mh': 0.0,
+ 'mid_cond_scale': 0.15,
+ 'ml': 0.0,
+ 'moclip_ckpt': './weights/moclip_checkpoints/models/tmr_humanml3d_guoh3dfeats/last_weights/text_encoder.pt',
+ 'model': 'semtalk',
+ 'momentum': 0.8,
+ 'motion_f': 256,
+ 'msmr': 0.0,
+ 'mtmr': 0.0,
+ 'mu': 0.0,
+ 'multi_length_training': [1.0],
+ 'n_layer': 1,
+ 'n_poses': 34,
+ 'n_pre_poses': 4,
+ 'name': '0413_074543_gate_abl_A_no_vib',
+ 'nesterov': True,
+ 'new_cache': False,
+ 'no_adv_epoch': 999,
+ 'notes': '',
+ 'num_workers': 16,
+ 'opt': 'adam',
+ 'opt_betas': [0.5, 0.999],
+ 'ori_joints': 'beat_smplx_joints',
+ 'ori_joints_6d': 'spine_neck_141',
+ 'out_name': None,
+ 'out_path': './outputs/',
+ 'phys_alpha': 1.0,
+ 'phys_enabled': False,
+ 'phys_fused_lambda': 0.1,
+ 'phys_fused_latent': False,
+ 'phys_hands_lambda': 1.0,
+ 'phys_lambda': 0.01,
+ 'phys_tau_base': 0.5,
+ 'phys_tau_floor': 0.1,
+ 'phys_train_enabled': True,
+ 'phys_upper_only': False,
+ 'phys_warmup_end': 80,
+ 'phys_warmup_start': 30,
+ 'pos_encoding_type': 'sin',
+ 'pos_prob': 1.0,
+ 'pose_dims': 330,
+ 'pose_fps': 30,
+ 'pose_length': 64,
+ 'pose_norm': False,
+ 'pose_rep': 'smplxflame_30',
+ 'pre_frames': 4,
+ 'pre_type': 'zero',
+ 'predict_type': 'motion',
+ 'pretrain': False,
+ 'project': 'semtalk_gate_ablation',
+ 'queue_size': 1024,
+ 'random_seed': 2021,
+ 'rec_aud_weight': 0.0,
+ 'rec_fac_weight': 0.0,
+ 'rec_pos_weight': 0.0,
+ 'rec_txt_weight': 0.0,
+ 'rec_ver_weight': 0.0,
+ 'rec_weight': 1.0,
+ 'render_concurrent_num': 64,
+ 'render_tmp_img_filetype': 'bmp',
+ 'render_video_fps': 30,
+ 'render_video_height': 720,
+ 'render_video_width': 1920,
+ 'resume': '',
+ 'root_path': './',
+ 'rot6d': True,
+ 'sched_step': 3000,
+ 'sem_boost': 3.0,
+ 'sem_rep': None,
+ 'semantic_encoder': 'tmr',
+ 'sparse': 1,
+ 'speaker_dims': 4,
+ 'speaker_f': 0,
+ 'speaker_id': 'onehot',
+ 'start_epoch': 184,
+ 'stat': 'ts',
+ 'std_pose_path': '/datasets/trinity/train/',
+ 'stride': 20,
+ 't_encoder': 'null',
+ 't_fix_pre': False,
+ 't_pre_encoder': 'fasttext',
+ 'tar_joints': 'beat_smplx_full',
+ 'test_ckpt': '/datasets/beat_cache/beat_4english_15_141/last.bin',
+ 'test_data_path': '/datasets/trinity/test/',
+ 'test_length': 64,
+ 'test_path': 'datasets/beat2_semtalk_test_moclip.pkl',
+ 'test_period': 20,
+ 'test_state': False,
+ 'test_stride': 64,
+ 'train_data_path': '/datasets/trinity/train/',
+ 'train_path': 'datasets/beat2_semtalk_train_moclip',
+ 'train_rvq': False,
+ 'train_trans': True,
+ 'trainer': 'semtalk_sparse',
+ 'training_speakers': [2],
+ 'tsmr': 0.0,
+ 'ttmr': 0.0,
+ 'txt_prob': 1.0,
+ 'use_aug': False,
+ 'use_flow_matching': False,
+ 'use_wandb': False,
+ 'vae_codebook_size': 256,
+ 'vae_grow': [1, 1, 2, 1],
+ 'vae_layer': 4,
+ 'vae_length': 240,
+ 'vae_quantizer_lambda': 1.0,
+ 'vae_test_dim': 330,
+ 'vae_test_len': 32,
+ 'vae_test_stride': 20,
+ 'val_data_path': '/datasets/trinity/val/',
+ 'variational': False,
+ 'vel_weight': 0.0,
+ 'vib_beta_target': 0.001,
+ 'vib_enabled': False,
+ 'vib_free_bits': 0.5,
+ 'vib_timing_dim': 64,
+ 'vib_warmup_end': 100,
+ 'vib_warmup_start': 20,
+ 'vib_z_dim': 16,
+ 'wandb_name': 'h2d_motion_lm',
+ 'warmup_epochs': 0,
+ 'warmup_lr': 0.0005,
+ 'wei_weight': 0.0,
+ 'weight_decay': 0.0,
+ 'word_cache': False,
+ 'word_dims': 300,
+ 'word_f': 256,
+ 'word_index_num': 11195,
+ 'word_rep': 'textgrid',
+ 'z_type': 'speaker'}
+ 04-13 07:45:44 | # ------------ 0413_074543_gate_abl_A_no_vib ----------- #
+ 04-13 07:45:44 | PyTorch version: 2.1.0
+ 04-13 07:45:44 | CUDA version: 12.1
+ 04-13 07:45:44 | 4 GPUs
+ 04-13 07:45:44 | Random Seed: 2021
+ 04-13 07:45:45 | Init train dataloader success
+ 04-13 07:45:45 | Init test dataloader success
+[rank 1] CUDA_VISIBLE_DEVICES=0,1,2,3  device_count=4
+[rank 2] CUDA_VISIBLE_DEVICES=0,1,2,3  device_count=4
+[rank 3] CUDA_VISIBLE_DEVICES=0,1,2,3  device_count=4
+[rank 1] set_device(1)  device=1
+[rank 2] set_device(2)  device=2
+[rank 3] set_device(3)  device=3
+ 04-13 07:45:50 | DistributedDataParallel(
+  (module): semtalk_sparse(
+    (mass_cond_proj): Sequential(
+      (0): Linear(in_features=1, out_features=256, bias=True)
+      (1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (2): GELU(approximate='none')
+      (3): Linear(in_features=256, out_features=256, bias=True)
+    )
+    (hubert_encoder_body): Sequential(
+      (0): Conv1d(1024, 256, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+      (1): BatchNorm1d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+      (2): GELU(approximate='none')
+      (3): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,), bias=False)
+    )
+    (audio_pre_encoder_body): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=3, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=256, bias=True)
+      )
+    )
+    (at_attn_bert): Linear(in_features=512, out_features=512, bias=True)
+    (gate): Linear(in_features=256, out_features=2, bias=True)
+    (clip_embedding): Linear(in_features=256, out_features=256, bias=True)
+    (emotion_embedding): Linear(in_features=256, out_features=256, bias=True)
+    (at_attn_face_semantic): Linear(in_features=512, out_features=512, bias=True)
+    (at_attn_body_semantic): Linear(in_features=512, out_features=512, bias=True)
+    (gate_face): Linear(in_features=256, out_features=1, bias=True)
+    (gate_body): Linear(in_features=256, out_features=1, bias=True)
+    (beat_cons_loss): RhythmicIdentificationLoss()
+    (face_cons_mlp): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=256, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=256, bias=True)
+      )
+    )
+    (hands_cons_mlp): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=256, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=256, bias=True)
+      )
+    )
+    (predict_res_hands): predict_residual_zq(
+      (cross_layer): TransformerDecoderLayer(
+        (self_attn): MultiheadAttention(
+          (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+        )
+        (multihead_attn): MultiheadAttention(
+          (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+        )
+        (linear1): Linear(in_features=256, out_features=1024, bias=True)
+        (dropout): Dropout(p=0.1, inplace=False)
+        (linear2): Linear(in_features=1024, out_features=256, bias=True)
+        (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (dropout1): Dropout(p=0.1, inplace=False)
+        (dropout2): Dropout(p=0.1, inplace=False)
+        (dropout3): Dropout(p=0.1, inplace=False)
+      )
+      (cross_attn_1): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_2): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_3): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_4): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_5): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (map_zq2): Linear(in_features=512, out_features=256, bias=True)
+      (map_zq3): Linear(in_features=768, out_features=256, bias=True)
+      (map_zq4): Linear(in_features=1024, out_features=256, bias=True)
+      (map_zq5): Linear(in_features=1280, out_features=256, bias=True)
+      (classfier_1): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_2): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_3): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_4): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_5): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+    )
+    (predict_res_upper): predict_residual_zq(
+      (cross_layer): TransformerDecoderLayer(
+        (self_attn): MultiheadAttention(
+          (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+        )
+        (multihead_attn): MultiheadAttention(
+          (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+        )
+        (linear1): Linear(in_features=256, out_features=1024, bias=True)
+        (dropout): Dropout(p=0.1, inplace=False)
+        (linear2): Linear(in_features=1024, out_features=256, bias=True)
+        (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (dropout1): Dropout(p=0.1, inplace=False)
+        (dropout2): Dropout(p=0.1, inplace=False)
+        (dropout3): Dropout(p=0.1, inplace=False)
+      )
+      (cross_attn_1): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_2): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_3): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_4): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_5): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (map_zq2): Linear(in_features=512, out_features=256, bias=True)
+      (map_zq3): Linear(in_features=768, out_features=256, bias=True)
+      (map_zq4): Linear(in_features=1024, out_features=256, bias=True)
+      (map_zq5): Linear(in_features=1280, out_features=256, bias=True)
+      (classfier_1): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_2): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_3): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_4): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_5): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+    )
+    (predict_res_lower): predict_residual_zq(
+      (cross_layer): TransformerDecoderLayer(
+        (self_attn): MultiheadAttention(
+          (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+        )
+        (multihead_attn): MultiheadAttention(
+          (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+        )
+        (linear1): Linear(in_features=256, out_features=1024, bias=True)
+        (dropout): Dropout(p=0.1, inplace=False)
+        (linear2): Linear(in_features=1024, out_features=256, bias=True)
+        (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+        (dropout1): Dropout(p=0.1, inplace=False)
+        (dropout2): Dropout(p=0.1, inplace=False)
+        (dropout3): Dropout(p=0.1, inplace=False)
+      )
+      (cross_attn_1): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_2): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_3): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_4): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (cross_attn_5): TransformerDecoder(
+        (layers): ModuleList(
+          (0-2): 3 x TransformerDecoderLayer(
+            (self_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (multihead_attn): MultiheadAttention(
+              (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+            )
+            (linear1): Linear(in_features=256, out_features=1024, bias=True)
+            (dropout): Dropout(p=0.1, inplace=False)
+            (linear2): Linear(in_features=1024, out_features=256, bias=True)
+            (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+            (dropout1): Dropout(p=0.1, inplace=False)
+            (dropout2): Dropout(p=0.1, inplace=False)
+            (dropout3): Dropout(p=0.1, inplace=False)
+          )
+        )
+      )
+      (map_zq2): Linear(in_features=512, out_features=256, bias=True)
+      (map_zq3): Linear(in_features=768, out_features=256, bias=True)
+      (map_zq4): Linear(in_features=1024, out_features=256, bias=True)
+      (map_zq5): Linear(in_features=1280, out_features=256, bias=True)
+      (classfier_1): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_2): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_3): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_4): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+      (classfier_5): MLP(
+        (mlp): Sequential(
+          (0): Linear(in_features=256, out_features=256, bias=True)
+          (1): LeakyReLU(negative_slope=0.2, inplace=True)
+          (2): Linear(in_features=256, out_features=256, bias=True)
+        )
+      )
+    )
+    (body1d): Conv1d(768, 768, kernel_size=(2,), stride=(2,))
+    (upper1d): Conv1d(256, 256, kernel_size=(2,), stride=(2,))
+    (hands1d): Conv1d(256, 256, kernel_size=(2,), stride=(2,))
+    (lower1d): Conv1d(256, 256, kernel_size=(2,), stride=(2,))
+    (spearker_encoder_body1d): Conv1d(768, 768, kernel_size=(2,), stride=(2,))
+    (text_pre_encoder_body): Embedding(11195, 300)
+    (text_encoder_body): Linear(in_features=300, out_features=256, bias=True)
+    (motion_encoder): VQEncoderV6(
+      (main): Sequential(
+        (0): Conv1d(337, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+        (1): LeakyReLU(negative_slope=0.2)
+        (2): ResBlock(
+          (model): Sequential(
+            (0): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+            (1): LeakyReLU(negative_slope=0.2)
+            (2): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+          )
+        )
+        (3): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+        (4): LeakyReLU(negative_slope=0.2)
+        (5): ResBlock(
+          (model): Sequential(
+            (0): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+            (1): LeakyReLU(negative_slope=0.2)
+            (2): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+          )
+        )
+        (6): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+        (7): LeakyReLU(negative_slope=0.2)
+        (8): ResBlock(
+          (model): Sequential(
+            (0): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+            (1): LeakyReLU(negative_slope=0.2)
+            (2): Conv1d(256, 256, kernel_size=(3,), stride=(1,), padding=(1,))
+          )
+        )
+      )
+    )
+    (transformer_de_layer): TransformerDecoderLayer(
+      (self_attn): MultiheadAttention(
+        (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+      )
+      (multihead_attn): MultiheadAttention(
+        (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+      )
+      (linear1): Linear(in_features=768, out_features=1536, bias=True)
+      (dropout): Dropout(p=0.1, inplace=False)
+      (linear2): Linear(in_features=1536, out_features=768, bias=True)
+      (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (norm3): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (dropout1): Dropout(p=0.1, inplace=False)
+      (dropout2): Dropout(p=0.1, inplace=False)
+      (dropout3): Dropout(p=0.1, inplace=False)
+    )
+    (transformer_de_fu_layer): TransformerDecoderLayer(
+      (self_attn): MultiheadAttention(
+        (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+      )
+      (multihead_attn): MultiheadAttention(
+        (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+      )
+      (linear1): Linear(in_features=256, out_features=512, bias=True)
+      (dropout): Dropout(p=0.1, inplace=False)
+      (linear2): Linear(in_features=512, out_features=256, bias=True)
+      (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+      (dropout1): Dropout(p=0.1, inplace=False)
+      (dropout2): Dropout(p=0.1, inplace=False)
+      (dropout3): Dropout(p=0.1, inplace=False)
+    )
+    (semantic_body_decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0): TransformerDecoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (multihead_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (linear1): Linear(in_features=256, out_features=512, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=512, out_features=256, bias=True)
+          (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+          (dropout3): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (body_semantic_mlp): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=256, out_features=256, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=256, out_features=256, bias=True)
+      )
+    )
+    (hands_face_decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0): TransformerDecoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (multihead_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (linear1): Linear(in_features=256, out_features=512, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=512, out_features=256, bias=True)
+          (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+          (dropout3): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (position_embeddings): PeriodicPositionalEncoding(
+      (dropout): Dropout(p=0.1, inplace=False)
+    )
+    (semantic_position_embeddings): PeriodicPositionalEncoding(
+      (dropout): Dropout(p=0.1, inplace=False)
+    )
+    (transformer_en_layer): TransformerEncoderLayer(
+      (self_attn): MultiheadAttention(
+        (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+      )
+      (linear1): Linear(in_features=768, out_features=1536, bias=True)
+      (dropout): Dropout(p=0.1, inplace=False)
+      (linear2): Linear(in_features=1536, out_features=768, bias=True)
+      (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (dropout1): Dropout(p=0.1, inplace=False)
+      (dropout2): Dropout(p=0.1, inplace=False)
+    )
+    (motion_self_encoder): TransformerEncoder(
+      (layers): ModuleList(
+        (0): TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (linear1): Linear(in_features=768, out_features=1536, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=1536, out_features=768, bias=True)
+          (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (audio_feature2motion): Linear(in_features=256, out_features=768, bias=True)
+    (feature2motion): Linear(in_features=256, out_features=768, bias=True)
+    (bodyhints_body): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=256, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=256, bias=True)
+      )
+    )
+    (motion2latent_upper): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=768, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=768, bias=True)
+      )
+    )
+    (motion2latent_hands): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=768, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=768, bias=True)
+      )
+    )
+    (motion2latent_lower): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=768, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=768, bias=True)
+      )
+    )
+    (wordhints_decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0-7): 8 x TransformerDecoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (multihead_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (linear1): Linear(in_features=768, out_features=1536, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=1536, out_features=768, bias=True)
+          (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+          (dropout3): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (upper_decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0): TransformerDecoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (multihead_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (linear1): Linear(in_features=768, out_features=1536, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=1536, out_features=768, bias=True)
+          (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+          (dropout3): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (hands_decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0): TransformerDecoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (multihead_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (linear1): Linear(in_features=768, out_features=1536, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=1536, out_features=768, bias=True)
+          (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+          (dropout3): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (lower_decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0): TransformerDecoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (multihead_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=768, out_features=768, bias=True)
+          )
+          (linear1): Linear(in_features=768, out_features=1536, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=1536, out_features=768, bias=True)
+          (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+          (dropout3): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (upper_hands_decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0): TransformerDecoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (multihead_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (linear1): Linear(in_features=256, out_features=512, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=512, out_features=256, bias=True)
+          (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+          (dropout3): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (lower_hands_decoder): TransformerDecoder(
+      (layers): ModuleList(
+        (0): TransformerDecoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (multihead_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=256, out_features=256, bias=True)
+          )
+          (linear1): Linear(in_features=256, out_features=512, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=512, out_features=256, bias=True)
+          (norm1): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (norm3): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+          (dropout3): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+    (upper_classifier): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=256, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=256, bias=True)
+      )
+    )
+    (hands_classifier): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=256, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=256, bias=True)
+      )
+    )
+    (lower_classifier): MLP(
+      (mlp): Sequential(
+        (0): Linear(in_features=256, out_features=768, bias=True)
+        (1): LeakyReLU(negative_slope=0.2, inplace=True)
+        (2): Linear(in_features=768, out_features=256, bias=True)
+      )
+    )
+    (motion_down_upper): Linear(in_features=768, out_features=256, bias=True)
+    (motion_down_hands): Linear(in_features=768, out_features=256, bias=True)
+    (motion_down_lower): Linear(in_features=768, out_features=256, bias=True)
+    (spearker_encoder_body): Embedding(25, 768)
+  )
+)
+ 04-13 07:45:50 | init semtalk_svib_phys success
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+ 04-13 07:45:52 | DistributedDataParallel(
+  (module): VAESKConv(
+    (encoder): LocalEncoder(
+      (layers): ModuleList(
+        (0): Sequential(
+          (0): SkeletonResidual(
+            (residual): Sequential(
+              (0): SkeletonConv()
+              (1): GroupNorm(10, 330, eps=1e-05, affine=True)
+            )
+            (shortcut): SkeletonConv()
+            (common): Sequential(
+              (0): SkeletonPool()
+              (1): Tanh()
+            )
+          )
+        )
+        (1): Sequential(
+          (0): SkeletonResidual(
+            (residual): Sequential(
+              (0): SkeletonConv()
+              (1): GroupNorm(10, 210, eps=1e-05, affine=True)
+            )
+            (shortcut): SkeletonConv()
+            (common): Sequential(
+              (0): SkeletonPool()
+              (1): Tanh()
+            )
+          )
+        )
+        (2-3): 2 x Sequential(
+          (0): SkeletonResidual(
+            (residual): Sequential(
+              (0): SkeletonConv()
+              (1): GroupNorm(10, 240, eps=1e-05, affine=True)
+            )
+            (shortcut): SkeletonConv()
+            (common): Sequential(
+              (0): Tanh()
+            )
+          )
+        )
+      )
+    )
+    (decoder): VQDecoderV3(
+      (main): Sequential(
+        (0): ResBlock(
+          (model): Sequential(
+            (0): Conv1d(240, 240, kernel_size=(3,), stride=(1,), padding=(1,))
+            (1): LeakyReLU(negative_slope=0.2)
+            (2): Conv1d(240, 240, kernel_size=(3,), stride=(1,), padding=(1,))
+          )
+        )
+        (1): ResBlock(
+          (model): Sequential(
+            (0): Conv1d(240, 240, kernel_size=(3,), stride=(1,), padding=(1,))
+            (1): LeakyReLU(negative_slope=0.2)
+            (2): Conv1d(240, 240, kernel_size=(3,), stride=(1,), padding=(1,))
+          )
+        )
+        (2): Upsample(scale_factor=2.0, mode='nearest')
+        (3): Conv1d(240, 240, kernel_size=(3,), stride=(1,), padding=(1,))
+        (4): LeakyReLU(negative_slope=0.2, inplace=True)
+        (5): Upsample(scale_factor=2.0, mode='nearest')
+        (6): Conv1d(240, 240, kernel_size=(3,), stride=(1,), padding=(1,))
+        (7): LeakyReLU(negative_slope=0.2, inplace=True)
+        (8): Upsample(scale_factor=2.0, mode='nearest')
+        (9): Conv1d(240, 240, kernel_size=(3,), stride=(1,), padding=(1,))
+        (10): LeakyReLU(negative_slope=0.2, inplace=True)
+        (11): Upsample(scale_factor=2.0, mode='nearest')
+        (12): Conv1d(240, 330, kernel_size=(3,), stride=(1,), padding=(1,))
+        (13): LeakyReLU(negative_slope=0.2, inplace=True)
+        (14): Conv1d(330, 330, kernel_size=(3,), stride=(1,), padding=(1,))
+      )
+    )
+    (fc_mu): Linear(in_features=240, out_features=240, bias=True)
+    (fc_logvar): Linear(in_features=240, out_features=240, bias=True)
+  )
+)
+ 04-13 07:45:52 | init VAESKConv success
+ 04-13 07:45:52 | [sparse_trainer] Using original semtalk_base as base module
+Error occurred during strict loading: Error(s) in loading state_dict for semtalk_base:
+	Missing key(s) in state_dict: "base_mass_cond_gate", "base_mass_cond_vector", "base_mass_cond_proj.0.weight", "base_mass_cond_proj.0.bias", "base_mass_cond_proj.1.weight", "base_mass_cond_proj.1.bias", "base_mass_cond_proj.3.weight", "base_mass_cond_proj.3.bias", "base_mass_cond_hidden_proj.0.weight", "base_mass_cond_hidden_proj.0.bias", "base_mass_cond_hidden_proj.1.weight", "base_mass_cond_hidden_proj.1.bias". 
+Applied guarded non-strict load. Missing=['base_mass_cond_gate', 'base_mass_cond_vector', 'base_mass_cond_proj.0.weight', 'base_mass_cond_proj.0.bias', 'base_mass_cond_proj.1.weight'] Unexpected=[]
+Successfully loaded self-pretrained checkpoints for semtalk_base
+ 04-13 07:45:54 | [sparse_trainer] mass_cond_mode=none mass_cond_scale=0.3
+ 04-13 07:45:54 | [sparse_trainer] base_mass_cond_mode=none base_mass_cond_scale=0.3 joint_train_base_in_sparse=False
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Error occurred during strict loading: Error(s) in loading state_dict for semtalk_base:
+	Missing key(s) in state_dict: "base_mass_cond_gate", "base_mass_cond_vector", "base_mass_cond_proj.0.weight", "base_mass_cond_proj.0.bias", "base_mass_cond_proj.1.weight", "base_mass_cond_proj.1.bias", "base_mass_cond_proj.3.weight", "base_mass_cond_proj.3.bias", "base_mass_cond_hidden_proj.0.weight", "base_mass_cond_hidden_proj.0.bias", "base_mass_cond_hidden_proj.1.weight", "base_mass_cond_hidden_proj.1.bias". 
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Applied guarded non-strict load. Missing=['base_mass_cond_gate', 'base_mass_cond_vector', 'base_mass_cond_proj.0.weight', 'base_mass_cond_proj.0.bias', 'base_mass_cond_proj.1.weight'] Unexpected=[]
+Successfully loaded self-pretrained checkpoints for semtalk_base
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Error occurred during strict loading: Error(s) in loading state_dict for semtalk_base:
+	Missing key(s) in state_dict: "base_mass_cond_gate", "base_mass_cond_vector", "base_mass_cond_proj.0.weight", "base_mass_cond_proj.0.bias", "base_mass_cond_proj.1.weight", "base_mass_cond_proj.1.bias", "base_mass_cond_proj.3.weight", "base_mass_cond_proj.3.bias", "base_mass_cond_hidden_proj.0.weight", "base_mass_cond_hidden_proj.0.bias", "base_mass_cond_hidden_proj.1.weight", "base_mass_cond_hidden_proj.1.bias". 
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+[rank 0] all VQ checkpoints loaded — GPU mem: 2.51 GB
+ 04-13 07:45:54 | [sparse_trainer] Base module frozen (eval)
+[rank 0] CustomTrainer.__init__ completed — GPU mem: 2.51 GB
+ 04-13 07:45:54 | [rank 0] Resuming from checkpoint: outputs/custom/0311_102115_s01_base_r05_r05base_s01_base_r05_b0.010_fb0.30_pl0.08_tb0.50_tf0.10/best_184.bin
+Applied guarded non-strict load. Missing=['base_mass_cond_gate', 'base_mass_cond_vector', 'base_mass_cond_proj.0.weight', 'base_mass_cond_proj.0.bias', 'base_mass_cond_proj.1.weight'] Unexpected=[]
+Successfully loaded self-pretrained checkpoints for semtalk_base
+Error occurred during strict loading: Error(s) in loading state_dict for semtalk_base:
+	Missing key(s) in state_dict: "base_mass_cond_gate", "base_mass_cond_vector", "base_mass_cond_proj.0.weight", "base_mass_cond_proj.0.bias", "base_mass_cond_proj.1.weight", "base_mass_cond_proj.1.bias", "base_mass_cond_proj.3.weight", "base_mass_cond_proj.3.bias", "base_mass_cond_hidden_proj.0.weight", "base_mass_cond_hidden_proj.0.bias", "base_mass_cond_hidden_proj.1.weight", "base_mass_cond_hidden_proj.1.bias". 
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Applied guarded non-strict load. Missing=['base_mass_cond_gate', 'base_mass_cond_vector', 'base_mass_cond_proj.0.weight', 'base_mass_cond_proj.0.bias', 'base_mass_cond_proj.1.weight'] Unexpected=[]
+Successfully loaded self-pretrained checkpoints for semtalk_base
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+[rank 1] all VQ checkpoints loaded — GPU mem: 2.51 GB
+[rank 1] CustomTrainer.__init__ completed — GPU mem: 2.51 GB
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+[rank 2] all VQ checkpoints loaded — GPU mem: 2.51 GB
+[rank 2] CustomTrainer.__init__ completed — GPU mem: 2.51 GB
+Successfully loaded self-pretrained checkpoints for VAESKConv
+Successfully loaded self-pretrained checkpoints for VAESKConv
+[rank 3] all VQ checkpoints loaded — GPU mem: 2.51 GB
+[rank 3] CustomTrainer.__init__ completed — GPU mem: 2.51 GB
+Error occurred during strict loading: Error(s) in loading state_dict for DistributedDataParallel:
+	Missing key(s) in state_dict: "module.mass_cond_vector", "module.mass_cond_proj.0.weight", "module.mass_cond_proj.0.bias", "module.mass_cond_proj.1.weight", "module.mass_cond_proj.1.bias", "module.mass_cond_proj.3.weight", "module.mass_cond_proj.3.bias", "module.gate.weight", "module.gate.bias". 
+	Unexpected key(s) in state_dict: "module.gate.timing_proj.0.weight", "module.gate.timing_proj.0.bias", "module.gate.timing_proj.1.weight", "module.gate.timing_proj.1.bias", "module.gate.fc_mu.weight", "module.gate.fc_mu.bias", "module.gate.fc_logvar.weight", "module.gate.fc_logvar.bias", "module.gate.classifier.0.weight", "module.gate.classifier.0.bias", "module.gate.classifier.2.weight", "module.gate.classifier.2.bias". 
+Applied guarded non-strict load. Missing=['module.mass_cond_vector', 'module.mass_cond_proj.0.weight', 'module.mass_cond_proj.0.bias', 'module.mass_cond_proj.1.weight', 'module.mass_cond_proj.1.bias'] Unexpected=['module.gate.timing_proj.0.weight', 'module.gate.timing_proj.0.bias', 'module.gate.timing_proj.1.weight', 'module.gate.timing_proj.1.bias', 'module.gate.fc_mu.weight']
+Successfully loaded self-pretrained checkpoints for semtalk_svib_phys
+[rank 0] reaching dist.barrier()
+ 04-13 07:45:55 | [rank 0] Checkpoint loaded successfully
+Error occurred during strict loading: Error(s) in loading state_dict for DistributedDataParallel:
+	Missing key(s) in state_dict: "module.mass_cond_vector", "module.mass_cond_proj.0.weight", "module.mass_cond_proj.0.bias", "module.mass_cond_proj.1.weight", "module.mass_cond_proj.1.bias", "module.mass_cond_proj.3.weight", "module.mass_cond_proj.3.bias", "module.gate.weight", "module.gate.bias". 
+	Unexpected key(s) in state_dict: "module.gate.timing_proj.0.weight", "module.gate.timing_proj.0.bias", "module.gate.timing_proj.1.weight", "module.gate.timing_proj.1.bias", "module.gate.fc_mu.weight", "module.gate.fc_mu.bias", "module.gate.fc_logvar.weight", "module.gate.fc_logvar.bias", "module.gate.classifier.0.weight", "module.gate.classifier.0.bias", "module.gate.classifier.2.weight", "module.gate.classifier.2.bias". 
+Applied guarded non-strict load. Missing=['module.mass_cond_vector', 'module.mass_cond_proj.0.weight', 'module.mass_cond_proj.0.bias', 'module.mass_cond_proj.1.weight', 'module.mass_cond_proj.1.bias'] Unexpected=['module.gate.timing_proj.0.weight', 'module.gate.timing_proj.0.bias', 'module.gate.timing_proj.1.weight', 'module.gate.timing_proj.1.bias', 'module.gate.fc_mu.weight']
+Successfully loaded self-pretrained checkpoints for semtalk_svib_phys
+[rank 1] reaching dist.barrier()
+Error occurred during strict loading: Error(s) in loading state_dict for DistributedDataParallel:
+	Missing key(s) in state_dict: "module.mass_cond_vector", "module.mass_cond_proj.0.weight", "module.mass_cond_proj.0.bias", "module.mass_cond_proj.1.weight", "module.mass_cond_proj.1.bias", "module.mass_cond_proj.3.weight", "module.mass_cond_proj.3.bias", "module.gate.weight", "module.gate.bias". 
+	Unexpected key(s) in state_dict: "module.gate.timing_proj.0.weight", "module.gate.timing_proj.0.bias", "module.gate.timing_proj.1.weight", "module.gate.timing_proj.1.bias", "module.gate.fc_mu.weight", "module.gate.fc_mu.bias", "module.gate.fc_logvar.weight", "module.gate.fc_logvar.bias", "module.gate.classifier.0.weight", "module.gate.classifier.0.bias", "module.gate.classifier.2.weight", "module.gate.classifier.2.bias". 
+Applied guarded non-strict load. Missing=['module.mass_cond_vector', 'module.mass_cond_proj.0.weight', 'module.mass_cond_proj.0.bias', 'module.mass_cond_proj.1.weight', 'module.mass_cond_proj.1.bias'] Unexpected=['module.gate.timing_proj.0.weight', 'module.gate.timing_proj.0.bias', 'module.gate.timing_proj.1.weight', 'module.gate.timing_proj.1.bias', 'module.gate.fc_mu.weight']
+Successfully loaded self-pretrained checkpoints for semtalk_svib_phys
+[rank 2] reaching dist.barrier()
+Error occurred during strict loading: Error(s) in loading state_dict for DistributedDataParallel:
+	Missing key(s) in state_dict: "module.mass_cond_vector", "module.mass_cond_proj.0.weight", "module.mass_cond_proj.0.bias", "module.mass_cond_proj.1.weight", "module.mass_cond_proj.1.bias", "module.mass_cond_proj.3.weight", "module.mass_cond_proj.3.bias", "module.gate.weight", "module.gate.bias". 
+	Unexpected key(s) in state_dict: "module.gate.timing_proj.0.weight", "module.gate.timing_proj.0.bias", "module.gate.timing_proj.1.weight", "module.gate.timing_proj.1.bias", "module.gate.fc_mu.weight", "module.gate.fc_mu.bias", "module.gate.fc_logvar.weight", "module.gate.fc_logvar.bias", "module.gate.classifier.0.weight", "module.gate.classifier.0.bias", "module.gate.classifier.2.weight", "module.gate.classifier.2.bias". 
+Applied guarded non-strict load. Missing=['module.mass_cond_vector', 'module.mass_cond_proj.0.weight', 'module.mass_cond_proj.0.bias', 'module.mass_cond_proj.1.weight', 'module.mass_cond_proj.1.bias'] Unexpected=['module.gate.timing_proj.0.weight', 'module.gate.timing_proj.0.bias', 'module.gate.timing_proj.1.weight', 'module.gate.timing_proj.1.bias', 'module.gate.fc_mu.weight']
+Successfully loaded self-pretrained checkpoints for semtalk_svib_phys
+[rank 3] reaching dist.barrier()
+[rank 2] passed dist.barrier()
+[rank 2] entering training loop  start_epoch=184
+[rank 0] passed dist.barrier()[rank 1] passed dist.barrier()
+[rank 3] passed dist.barrier()
+
+[rank 0] entering training loop  start_epoch=184
+[rank 3] entering training loop  start_epoch=184
+[rank 1] entering training loop  start_epoch=184
+ 04-13 07:45:57 | Time info >>>>  elapsed: 0.05 mins	remain: 0.02 mins
+ 04-13 07:46:08 | [184][000/029]  gate: 0.682	gate_self: 0.675	gate_word: 0.675	sem: 0.618	sem_self: 0.619	sem_word: 0.621	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 1925	ntime: 8656	mem: 47.55 
+ 04-13 07:49:15 | l2 loss: 7.555598883382e-08
+ 04-13 07:49:15 | lvel loss: 7.636728522998074e-05
+ 04-13 07:49:15 | fid score: 0.4609942017397932
+ 04-13 07:49:15 | align score: 0.7601458937915742
+ 04-13 07:49:15 | l1div score: 12.528946701752092
+ 04-13 07:49:15 | total inference time: 96 s for 956 s motion
+ 04-13 07:49:18 | Time info >>>>  elapsed: 3.39 mins	remain: 1.45 mins
+ 04-13 07:49:19 | [185][000/029]  gate: 0.834	gate_self: 0.830	gate_word: 0.835	sem: 0.348	sem_self: 0.357	sem_word: 0.354	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0531	ntime: 1053	mem: 70.76 
+ 04-13 07:51:30 | l2 loss: 7.588712991818565e-08
+ 04-13 07:51:30 | lvel loss: 7.656119982982307e-05
+ 04-13 07:51:30 | fid score: 0.4467281275363213
+ 04-13 07:51:30 | align score: 0.7607353599743288
+ 04-13 07:51:30 | l1div score: 12.628795075782339
+ 04-13 07:51:30 | total inference time: 89 s for 956 s motion
+ 04-13 07:51:32 | Time info >>>>  elapsed: 5.64 mins	remain: 2.36 mins
+ 04-13 07:51:34 | [186][000/029]  gate: 0.881	gate_self: 0.883	gate_word: 0.887	sem: 0.270	sem_self: 0.271	sem_word: 0.273	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0526	ntime: 0923	mem: 98.18 
+ 04-13 07:53:44 | l2 loss: 7.636558018144634e-08
+ 04-13 07:53:44 | lvel loss: 7.664440516039056e-05
+ 04-13 07:53:44 | fid score: 0.4564824904405258
+ 04-13 07:53:44 | align score: 0.7602641859249266
+ 04-13 07:53:44 | l1div score: 12.576596436795386
+ 04-13 07:53:44 | total inference time: 89 s for 956 s motion
+ 04-13 07:53:45 | Time info >>>>  elapsed: 7.85 mins	remain: 3.23 mins
+ 04-13 07:53:47 | [187][000/029]  gate: 0.865	gate_self: 0.869	gate_word: 0.864	sem: 0.278	sem_self: 0.275	sem_word: 0.283	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0533	ntime: 0924	mem: 98.18 
+ 04-13 07:55:57 | l2 loss: 7.610186443566132e-08
+ 04-13 07:55:57 | lvel loss: 7.649211444585283e-05
+ 04-13 07:55:57 | fid score: 0.45497845588590025
+ 04-13 07:55:57 | align score: 0.76257825897887
+ 04-13 07:55:57 | l1div score: 12.529609780198527
+ 04-13 07:55:57 | total inference time: 90 s for 956 s motion
+ 04-13 07:55:58 | Time info >>>>  elapsed: 10.07 mins	remain: 4.07 mins
+ 04-13 07:56:00 | [188][000/029]  gate: 0.920	gate_self: 0.924	gate_word: 0.927	sem: 0.196	sem_self: 0.197	sem_word: 0.193	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0525	ntime: 0924	mem: 98.18 
+ 04-13 07:58:11 | l2 loss: 7.701978434193237e-08
+ 04-13 07:58:11 | lvel loss: 7.716937759028835e-05
+ 04-13 07:58:11 | fid score: 0.43992557922805986
+ 04-13 07:58:11 | align score: 0.7637886404518626
+ 04-13 07:58:11 | l1div score: 12.558730979504446
+ 04-13 07:58:11 | total inference time: 90 s for 956 s motion
+ 04-13 07:58:13 | Time info >>>>  elapsed: 12.32 mins	remain: 4.89 mins
+ 04-13 07:58:15 | [189][000/029]  gate: 0.943	gate_self: 0.942	gate_word: 0.943	sem: 0.150	sem_self: 0.148	sem_word: 0.150	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0527	ntime: 0930	mem: 98.18 
+ 04-13 08:00:26 | l2 loss: 7.665687004390798e-08
+ 04-13 08:00:26 | lvel loss: 7.699512453062812e-05
+ 04-13 08:00:26 | fid score: 0.44614279068120677
+ 04-13 08:00:26 | align score: 0.7631014034164862
+ 04-13 08:00:26 | l1div score: 12.530652865627543
+ 04-13 08:00:26 | total inference time: 90 s for 956 s motion
+ 04-13 08:00:27 | Time info >>>>  elapsed: 14.56 mins	remain: 5.67 mins
+ 04-13 08:00:29 | [190][000/029]  gate: 0.976	gate_self: 0.973	gate_word: 0.974	sem: 0.106	sem_self: 0.105	sem_word: 0.107	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0527	ntime: 0924	mem: 98.18 
+ 04-13 08:02:40 | l2 loss: 7.60987785862177e-08
+ 04-13 08:02:40 | lvel loss: 7.66005168590666e-05
+ 04-13 08:02:40 | fid score: 0.43173127807124434
+ 04-13 08:02:40 | align score: 0.764672997101553
+ 04-13 08:02:40 | l1div score: 12.521816953973339
+ 04-13 08:02:40 | total inference time: 90 s for 956 s motion
+ 04-13 08:02:42 | Time info >>>>  elapsed: 16.80 mins	remain: 6.42 mins
+ 04-13 08:02:44 | [191][000/029]  gate: 0.954	gate_self: 0.951	gate_word: 0.953	sem: 0.136	sem_self: 0.135	sem_word: 0.133	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0527	ntime: 0951	mem: 98.18 
+ 04-13 08:04:54 | l2 loss: 7.61188623848431e-08
+ 04-13 08:04:54 | lvel loss: 7.642149798831197e-05
+ 04-13 08:04:54 | fid score: 0.4488294091348406
+ 04-13 08:04:54 | align score: 0.7681302469582594
+ 04-13 08:04:54 | l1div score: 12.501742740987568
+ 04-13 08:04:54 | total inference time: 89 s for 956 s motion
+ 04-13 08:04:56 | Time info >>>>  elapsed: 19.03 mins	remain: 7.14 mins
+ 04-13 08:04:57 | [192][000/029]  gate: 0.984	gate_self: 0.980	gate_word: 0.982	sem: 0.090	sem_self: 0.094	sem_word: 0.093	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0521	ntime: 0950	mem: 98.18 
+ 04-13 08:07:07 | l2 loss: 7.594369912998308e-08
+ 04-13 08:07:07 | lvel loss: 7.65946180240811e-05
+ 04-13 08:07:07 | fid score: 0.4297504379149881
+ 04-13 08:07:07 | align score: 0.7640093212544052
+ 04-13 08:07:07 | l1div score: 12.498701930818273
+ 04-13 08:07:07 | total inference time: 89 s for 956 s motion
+ 04-13 08:07:10 | Time info >>>>  elapsed: 21.27 mins	remain: 7.82 mins
+ 04-13 08:07:12 | [193][000/029]  gate: 0.974	gate_self: 0.975	gate_word: 0.977	sem: 0.085	sem_self: 0.087	sem_word: 0.086	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0521	ntime: 0928	mem: 98.18 
+ 04-13 08:09:22 | l2 loss: 7.676972395112833e-08
+ 04-13 08:09:22 | lvel loss: 7.701438383923095e-05
+ 04-13 08:09:22 | fid score: 0.45339707873691193
+ 04-13 08:09:22 | align score: 0.7677956320032625
+ 04-13 08:09:22 | l1div score: 12.462033078500916
+ 04-13 08:09:22 | total inference time: 89 s for 956 s motion
+ 04-13 08:09:23 | Time info >>>>  elapsed: 23.49 mins	remain: 8.48 mins
+ 04-13 08:09:25 | [194][000/029]  gate: 0.983	gate_self: 0.984	gate_word: 0.983	sem: 0.080	sem_self: 0.080	sem_word: 0.079	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0523	ntime: 0921	mem: 98.18 
+ 04-13 08:11:35 | l2 loss: 7.580584966220569e-08
+ 04-13 08:11:35 | lvel loss: 7.650438178142479e-05
+ 04-13 08:11:35 | fid score: 0.42546548048513166
+ 04-13 08:11:35 | align score: 0.763016063288023
+ 04-13 08:11:35 | l1div score: 12.442723826218183
+ 04-13 08:11:35 | total inference time: 89 s for 956 s motion
+ 04-13 08:11:38 | Time info >>>>  elapsed: 25.73 mins	remain: 9.10 mins
+ 04-13 08:11:39 | [195][000/029]  gate: 0.981	gate_self: 0.980	gate_word: 0.979	sem: 0.074	sem_self: 0.073	sem_word: 0.071	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0977	mem: 98.18 
+ 04-13 08:13:49 | l2 loss: 7.706273684801238e-08
+ 04-13 08:13:49 | lvel loss: 7.713583059737366e-05
+ 04-13 08:13:49 | fid score: 0.450506588424628
+ 04-13 08:13:49 | align score: 0.766176723146713
+ 04-13 08:13:49 | l1div score: 12.416420298584779
+ 04-13 08:13:49 | total inference time: 89 s for 956 s motion
+ 04-13 08:13:51 | Time info >>>>  elapsed: 27.94 mins	remain: 9.70 mins
+ 04-13 08:13:52 | [196][000/029]  gate: 0.986	gate_self: 0.984	gate_word: 0.985	sem: 0.063	sem_self: 0.063	sem_word: 0.063	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0526	ntime: 0926	mem: 98.18 
+ 04-13 08:16:03 | l2 loss: 7.580109482765078e-08
+ 04-13 08:16:03 | lvel loss: 7.652815687303714e-05
+ 04-13 08:16:03 | fid score: 0.42488219188056675
+ 04-13 08:16:03 | align score: 0.7611591427747535
+ 04-13 08:16:03 | l1div score: 12.426066924128815
+ 04-13 08:16:03 | total inference time: 89 s for 956 s motion
+ 04-13 08:16:05 | Time info >>>>  elapsed: 30.19 mins	remain: 10.27 mins
+ 04-13 08:16:07 | [197][000/029]  gate: 0.988	gate_self: 0.987	gate_word: 0.985	sem: 0.050	sem_self: 0.050	sem_word: 0.051	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0522	ntime: 0925	mem: 98.18 
+ 04-13 08:18:17 | l2 loss: 7.655228987765472e-08
+ 04-13 08:18:17 | lvel loss: 7.678394445477604e-05
+ 04-13 08:18:17 | fid score: 0.4721650319778057
+ 04-13 08:18:17 | align score: 0.767631575771461
+ 04-13 08:18:17 | l1div score: 12.418990616419325
+ 04-13 08:18:17 | total inference time: 90 s for 956 s motion
+ 04-13 08:18:18 | Time info >>>>  elapsed: 32.40 mins	remain: 10.80 mins
+ 04-13 08:18:20 | [198][000/029]  gate: 0.988	gate_self: 0.993	gate_word: 0.991	sem: 0.050	sem_self: 0.048	sem_word: 0.051	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0520	ntime: 0930	mem: 98.18 
+ 04-13 08:20:31 | l2 loss: 7.669330219114967e-08
+ 04-13 08:20:31 | lvel loss: 7.703318153956945e-05
+ 04-13 08:20:31 | fid score: 0.43774817868153626
+ 04-13 08:20:31 | align score: 0.7695147603106265
+ 04-13 08:20:31 | l1div score: 12.429138030367417
+ 04-13 08:20:31 | total inference time: 90 s for 956 s motion
+ 04-13 08:20:32 | Time info >>>>  elapsed: 34.63 mins	remain: 11.31 mins
+ 04-13 08:20:34 | [199][000/029]  gate: 0.986	gate_self: 0.989	gate_word: 0.990	sem: 0.059	sem_self: 0.059	sem_word: 0.058	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0520	ntime: 0967	mem: 98.18 
+ 04-13 08:22:44 | l2 loss: 7.701379716118274e-08
+ 04-13 08:22:44 | lvel loss: 7.70695718549464e-05
+ 04-13 08:22:44 | fid score: 0.45924199470837923
+ 04-13 08:22:44 | align score: 0.769572927529841
+ 04-13 08:22:44 | l1div score: 12.429436236478628
+ 04-13 08:22:44 | total inference time: 90 s for 956 s motion
+ 04-13 08:22:46 | Time info >>>>  elapsed: 36.86 mins	remain: 11.79 mins
+ 04-13 08:22:47 | [200][000/029]  gate: 0.992	gate_self: 0.992	gate_word: 0.992	sem: 0.039	sem_self: 0.039	sem_word: 0.038	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0519	ntime: 0949	mem: 98.18 
+ 04-13 08:24:57 | l2 loss: 7.583317294936865e-08
+ 04-13 08:24:57 | lvel loss: 7.649232447342206e-05
+ 04-13 08:24:57 | fid score: 0.4327703922393793
+ 04-13 08:24:57 | align score: 0.763596976618576
+ 04-13 08:24:57 | l1div score: 12.43360973160675
+ 04-13 08:24:57 | total inference time: 89 s for 956 s motion
+ 04-13 08:24:58 | Time info >>>>  elapsed: 39.07 mins	remain: 12.25 mins
+ 04-13 08:25:00 | [201][000/029]  gate: 0.992	gate_self: 0.993	gate_word: 0.993	sem: 0.034	sem_self: 0.033	sem_word: 0.031	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0931	mem: 98.18 
+ 04-13 08:27:11 | l2 loss: 7.555845923284869e-08
+ 04-13 08:27:11 | lvel loss: 7.641497250970107e-05
+ 04-13 08:27:11 | fid score: 0.43115600511803365
+ 04-13 08:27:11 | align score: 0.7668157238326146
+ 04-13 08:27:11 | l1div score: 12.441476826805967
+ 04-13 08:27:11 | total inference time: 90 s for 956 s motion
+ 04-13 08:27:12 | Time info >>>>  elapsed: 41.30 mins	remain: 12.68 mins
+ 04-13 08:27:14 | [202][000/029]  gate: 0.993	gate_self: 0.993	gate_word: 0.992	sem: 0.032	sem_self: 0.030	sem_word: 0.032	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0926	mem: 98.18 
+ 04-13 08:29:24 | l2 loss: 7.625299051783516e-08
+ 04-13 08:29:24 | lvel loss: 7.676765300928404e-05
+ 04-13 08:29:24 | fid score: 0.4127855613838243
+ 04-13 08:29:24 | align score: 0.7678950734726697
+ 04-13 08:29:24 | l1div score: 12.437770687311325
+ 04-13 08:29:24 | total inference time: 90 s for 956 s motion
+ 04-13 08:29:27 | Time info >>>>  elapsed: 43.55 mins	remain: 13.09 mins
+ 04-13 08:29:29 | [203][000/029]  gate: 0.993	gate_self: 0.993	gate_word: 0.993	sem: 0.032	sem_self: 0.030	sem_word: 0.034	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0520	ntime: 0962	mem: 98.18 
+ 04-13 08:31:39 | l2 loss: 7.613266940502237e-08
+ 04-13 08:31:39 | lvel loss: 7.644870237675768e-05
+ 04-13 08:31:39 | fid score: 0.44597568738609716
+ 04-13 08:31:39 | align score: 0.767582760780048
+ 04-13 08:31:39 | l1div score: 12.424978029046265
+ 04-13 08:31:39 | total inference time: 89 s for 956 s motion
+ 04-13 08:31:40 | Time info >>>>  elapsed: 45.77 mins	remain: 13.46 mins
+ 04-13 08:31:42 | [204][000/029]  gate: 0.999	gate_self: 0.999	gate_word: 0.999	sem: 0.018	sem_self: 0.019	sem_word: 0.019	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0962	mem: 98.18 
+ 04-13 08:33:51 | l2 loss: 7.568506619913565e-08
+ 04-13 08:33:51 | lvel loss: 7.653445669649899e-05
+ 04-13 08:33:51 | fid score: 0.4173761480805922
+ 04-13 08:33:51 | align score: 0.7619709816378706
+ 04-13 08:33:51 | l1div score: 12.426001771069416
+ 04-13 08:33:51 | total inference time: 89 s for 956 s motion
+ 04-13 08:33:53 | Time info >>>>  elapsed: 47.98 mins	remain: 13.81 mins
+ 04-13 08:33:54 | [205][000/029]  gate: 0.996	gate_self: 0.996	gate_word: 0.997	sem: 0.021	sem_self: 0.020	sem_word: 0.019	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0968	mem: 98.18 
+ 04-13 08:36:04 | l2 loss: 7.647167080002378e-08
+ 04-13 08:36:04 | lvel loss: 7.685967509463824e-05
+ 04-13 08:36:04 | fid score: 0.43971496039640545
+ 04-13 08:36:04 | align score: 0.7655567854732807
+ 04-13 08:36:04 | l1div score: 12.423381801453836
+ 04-13 08:36:04 | total inference time: 89 s for 956 s motion
+ 04-13 08:36:05 | Time info >>>>  elapsed: 50.19 mins	remain: 14.13 mins
+ 04-13 08:36:07 | [206][000/029]  gate: 0.996	gate_self: 0.996	gate_word: 0.996	sem: 0.022	sem_self: 0.022	sem_word: 0.022	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0522	ntime: 0946	mem: 98.18 
+ 04-13 08:38:17 | l2 loss: 7.737375379831269e-08
+ 04-13 08:38:17 | lvel loss: 7.735786157773191e-05
+ 04-13 08:38:17 | fid score: 0.4338863835757403
+ 04-13 08:38:17 | align score: 0.7673855841606616
+ 04-13 08:38:17 | l1div score: 12.423707431503832
+ 04-13 08:38:17 | total inference time: 89 s for 956 s motion
+ 04-13 08:38:20 | Time info >>>>  elapsed: 52.43 mins	remain: 14.44 mins
+ 04-13 08:38:21 | [207][000/029]  gate: 0.996	gate_self: 0.995	gate_word: 0.997	sem: 0.023	sem_self: 0.022	sem_word: 0.021	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0956	mem: 98.18 
+ 04-13 08:40:31 | l2 loss: 7.603022928993035e-08
+ 04-13 08:40:31 | lvel loss: 7.680886282663983e-05
+ 04-13 08:40:31 | fid score: 0.4737954672691025
+ 04-13 08:40:31 | align score: 0.7687090033481261
+ 04-13 08:40:31 | l1div score: 12.414227826957756
+ 04-13 08:40:31 | total inference time: 89 s for 956 s motion
+ 04-13 08:40:32 | Time info >>>>  elapsed: 54.64 mins	remain: 14.71 mins
+ 04-13 08:40:34 | [208][000/029]  gate: 0.995	gate_self: 0.997	gate_word: 0.997	sem: 0.022	sem_self: 0.021	sem_word: 0.020	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0514	ntime: 0977	mem: 98.18 
+ 04-13 08:42:43 | l2 loss: 7.715886197589156e-08
+ 04-13 08:42:43 | lvel loss: 7.712508140101306e-05
+ 04-13 08:42:43 | fid score: 0.41343240416388305
+ 04-13 08:42:43 | align score: 0.7655953404162699
+ 04-13 08:42:43 | l1div score: 12.4260282167996
+ 04-13 08:42:43 | total inference time: 89 s for 956 s motion
+ 04-13 08:42:45 | Time info >>>>  elapsed: 56.84 mins	remain: 14.96 mins
+ 04-13 08:42:46 | [209][000/029]  gate: 0.995	gate_self: 0.995	gate_word: 0.996	sem: 0.019	sem_self: 0.018	sem_word: 0.019	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0969	mem: 98.18 
+ 04-13 08:44:55 | l2 loss: 7.52229408816712e-08
+ 04-13 08:44:55 | lvel loss: 7.625451176239774e-05
+ 04-13 08:44:55 | fid score: 0.4385811476261967
+ 04-13 08:44:55 | align score: 0.7642098228625276
+ 04-13 08:44:55 | l1div score: 12.422606396437228
+ 04-13 08:44:55 | total inference time: 89 s for 956 s motion
+ 04-13 08:44:57 | Time info >>>>  elapsed: 59.04 mins	remain: 15.18 mins
+ 04-13 08:44:58 | [210][000/029]  gate: 0.998	gate_self: 0.997	gate_word: 0.996	sem: 0.014	sem_self: 0.014	sem_word: 0.015	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0961	mem: 98.18 
+ 04-13 08:47:08 | l2 loss: 7.625322078917721e-08
+ 04-13 08:47:08 | lvel loss: 7.685161197075498e-05
+ 04-13 08:47:08 | fid score: 0.45566098648015174
+ 04-13 08:47:08 | align score: 0.7687637799323741
+ 04-13 08:47:08 | l1div score: 12.418802269727179
+ 04-13 08:47:08 | total inference time: 89 s for 956 s motion
+ 04-13 08:47:09 | Time info >>>>  elapsed: 61.25 mins	remain: 15.38 mins
+ 04-13 08:47:11 | [211][000/029]  gate: 0.999	gate_self: 0.999	gate_word: 0.999	sem: 0.013	sem_self: 0.012	sem_word: 0.013	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0974	mem: 98.18 
+ 04-13 08:49:20 | l2 loss: 7.679513449143592e-08
+ 04-13 08:49:20 | lvel loss: 7.694508076916257e-05
+ 04-13 08:49:20 | fid score: 0.4222322798786413
+ 04-13 08:49:20 | align score: 0.7672614190845134
+ 04-13 08:49:20 | l1div score: 12.424258152273314
+ 04-13 08:49:20 | total inference time: 89 s for 956 s motion
+ 04-13 08:49:21 | Time info >>>>  elapsed: 63.45 mins	remain: 15.56 mins
+ 04-13 08:49:23 | [212][000/029]  gate: 0.997	gate_self: 0.998	gate_word: 0.998	sem: 0.012	sem_self: 0.011	sem_word: 0.011	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0519	ntime: 0923	mem: 98.18 
+ 04-13 08:51:32 | l2 loss: 7.671564973681396e-08
+ 04-13 08:51:32 | lvel loss: 7.702187943537596e-05
+ 04-13 08:51:32 | fid score: 0.42447930313577764
+ 04-13 08:51:32 | align score: 0.7680296175395798
+ 04-13 08:51:32 | l1div score: 12.42704873001318
+ 04-13 08:51:32 | total inference time: 89 s for 956 s motion
+ 04-13 08:51:34 | Time info >>>>  elapsed: 65.66 mins	remain: 15.72 mins
+ 04-13 08:51:35 | [213][000/029]  gate: 0.996	gate_self: 0.997	gate_word: 0.997	sem: 0.017	sem_self: 0.017	sem_word: 0.016	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0522	ntime: 0921	mem: 98.18 
+ 04-13 08:53:45 | l2 loss: 7.721794441748063e-08
+ 04-13 08:53:45 | lvel loss: 7.699304868165479e-05
+ 04-13 08:53:45 | fid score: 0.4308467540881695
+ 04-13 08:53:45 | align score: 0.7679947157900752
+ 04-13 08:53:45 | l1div score: 12.424178033790605
+ 04-13 08:53:45 | total inference time: 89 s for 956 s motion
+ 04-13 08:53:46 | Time info >>>>  elapsed: 67.86 mins	remain: 15.86 mins
+ 04-13 08:53:47 | [214][000/029]  gate: 0.995	gate_self: 0.994	gate_word: 0.994	sem: 0.017	sem_self: 0.018	sem_word: 0.014	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0957	mem: 98.18 
+ 04-13 08:55:57 | l2 loss: 7.677966734612769e-08
+ 04-13 08:55:57 | lvel loss: 7.687392736624535e-05
+ 04-13 08:55:57 | fid score: 0.43451969307484895
+ 04-13 08:55:57 | align score: 0.7705639705525855
+ 04-13 08:55:57 | l1div score: 12.419986406902009
+ 04-13 08:55:57 | total inference time: 89 s for 956 s motion
+ 04-13 08:55:58 | Time info >>>>  elapsed: 70.07 mins	remain: 15.97 mins
+ 04-13 08:56:00 | [215][000/029]  gate: 0.997	gate_self: 0.997	gate_word: 0.996	sem: 0.011	sem_self: 0.012	sem_word: 0.013	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0514	ntime: 0926	mem: 98.18 
+ 04-13 08:58:09 | l2 loss: 7.697832797277197e-08
+ 04-13 08:58:09 | lvel loss: 7.712035227515488e-05
+ 04-13 08:58:10 | fid score: 0.4227792696581609
+ 04-13 08:58:10 | align score: 0.7701635511017282
+ 04-13 08:58:10 | l1div score: 12.41639973256046
+ 04-13 08:58:10 | total inference time: 89 s for 956 s motion
+ 04-13 08:58:11 | Time info >>>>  elapsed: 72.28 mins	remain: 16.06 mins
+ 04-13 08:58:12 | [216][000/029]  gate: 0.997	gate_self: 0.997	gate_word: 0.996	sem: 0.011	sem_self: 0.011	sem_word: 0.011	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0960	mem: 98.18 
+ 04-13 09:00:23 | l2 loss: 7.621137377214323e-08
+ 04-13 09:00:23 | lvel loss: 7.679819405650248e-05
+ 04-13 09:00:23 | fid score: 0.4454744214347235
+ 04-13 09:00:23 | align score: 0.7683246386944969
+ 04-13 09:00:23 | l1div score: 12.409365887934324
+ 04-13 09:00:23 | total inference time: 89 s for 956 s motion
+ 04-13 09:00:24 | Time info >>>>  elapsed: 74.50 mins	remain: 16.14 mins
+ 04-13 09:00:26 | [217][000/029]  gate: 0.997	gate_self: 0.998	gate_word: 0.997	sem: 0.014	sem_self: 0.013	sem_word: 0.013	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0949	mem: 98.18 
+ 04-13 09:02:35 | l2 loss: 7.587349968093994e-08
+ 04-13 09:02:35 | lvel loss: 7.642851650996252e-05
+ 04-13 09:02:36 | fid score: 0.4312803455113112
+ 04-13 09:02:36 | align score: 0.7658010334215472
+ 04-13 09:02:36 | l1div score: 12.41264884886764
+ 04-13 09:02:36 | total inference time: 89 s for 956 s motion
+ 04-13 09:02:37 | Time info >>>>  elapsed: 76.71 mins	remain: 16.19 mins
+ 04-13 09:02:38 | [218][000/029]  gate: 0.996	gate_self: 0.996	gate_word: 0.996	sem: 0.012	sem_self: 0.013	sem_word: 0.012	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0957	mem: 98.18 
+ 04-13 09:04:48 | l2 loss: 7.580608234612276e-08
+ 04-13 09:04:48 | lvel loss: 7.642917038515311e-05
+ 04-13 09:04:48 | fid score: 0.46082429375526957
+ 04-13 09:04:48 | align score: 0.7670133216503694
+ 04-13 09:04:48 | l1div score: 12.411190564721247
+ 04-13 09:04:48 | total inference time: 89 s for 956 s motion
+ 04-13 09:04:50 | Time info >>>>  elapsed: 78.93 mins	remain: 16.22 mins
+ 04-13 09:04:51 | [219][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.004	sem_self: 0.004	sem_word: 0.004	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0519	ntime: 0955	mem: 98.18 
+ 04-13 09:07:00 | l2 loss: 7.701428456822912e-08
+ 04-13 09:07:00 | lvel loss: 7.707085234230427e-05
+ 04-13 09:07:00 | fid score: 0.4154000227603003
+ 04-13 09:07:00 | align score: 0.7689160212894723
+ 04-13 09:07:00 | l1div score: 12.414743155020254
+ 04-13 09:07:00 | total inference time: 89 s for 956 s motion
+ 04-13 09:07:02 | Time info >>>>  elapsed: 81.13 mins	remain: 16.23 mins
+ 04-13 09:07:04 | [220][000/029]  gate: 0.994	gate_self: 0.995	gate_word: 0.994	sem: 0.014	sem_self: 0.015	sem_word: 0.015	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0520	ntime: 0965	mem: 98.18 
+ 04-13 09:09:13 | l2 loss: 7.604670361965657e-08
+ 04-13 09:09:13 | lvel loss: 7.666379852927351e-05
+ 04-13 09:09:13 | fid score: 0.4239657623578408
+ 04-13 09:09:13 | align score: 0.7631579430347224
+ 04-13 09:09:13 | l1div score: 12.415350016248434
+ 04-13 09:09:13 | total inference time: 88 s for 956 s motion
+ 04-13 09:09:14 | Time info >>>>  elapsed: 83.33 mins	remain: 16.21 mins
+ 04-13 09:09:16 | [221][000/029]  gate: 0.998	gate_self: 0.998	gate_word: 0.996	sem: 0.008	sem_self: 0.007	sem_word: 0.009	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0967	mem: 98.18 
+ 04-13 09:11:25 | l2 loss: 7.672263107239178e-08
+ 04-13 09:11:25 | lvel loss: 7.695197811719769e-05
+ 04-13 09:11:25 | fid score: 0.4205991768919226
+ 04-13 09:11:25 | align score: 0.7710822059012538
+ 04-13 09:11:25 | l1div score: 12.413948482582592
+ 04-13 09:11:25 | total inference time: 88 s for 956 s motion
+ 04-13 09:11:27 | Time info >>>>  elapsed: 85.55 mins	remain: 16.19 mins
+ 04-13 09:11:29 | [222][000/029]  gate: 0.999	gate_self: 0.999	gate_word: 1.000	sem: 0.004	sem_self: 0.004	sem_word: 0.003	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0939	mem: 98.18 
+ 04-13 09:13:38 | l2 loss: 7.645954887356412e-08
+ 04-13 09:13:38 | lvel loss: 7.68131005665907e-05
+ 04-13 09:13:39 | fid score: 0.4340249691813787
+ 04-13 09:13:39 | align score: 0.7684368239362271
+ 04-13 09:13:39 | l1div score: 12.410421417119553
+ 04-13 09:13:39 | total inference time: 89 s for 956 s motion
+ 04-13 09:13:40 | Time info >>>>  elapsed: 87.77 mins	remain: 16.14 mins
+ 04-13 09:13:42 | [223][000/029]  gate: 0.999	gate_self: 0.998	gate_word: 0.998	sem: 0.008	sem_self: 0.008	sem_word: 0.007	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0513	ntime: 0959	mem: 98.18 
+ 04-13 09:15:51 | l2 loss: 7.713923762936131e-08
+ 04-13 09:15:51 | lvel loss: 7.719011875674794e-05
+ 04-13 09:15:51 | fid score: 0.4152876398323446
+ 04-13 09:15:51 | align score: 0.7680511124413959
+ 04-13 09:15:51 | l1div score: 12.41556224956007
+ 04-13 09:15:51 | total inference time: 89 s for 956 s motion
+ 04-13 09:15:53 | Time info >>>>  elapsed: 89.98 mins	remain: 16.07 mins
+ 04-13 09:15:54 | [224][000/029]  gate: 0.998	gate_self: 0.996	gate_word: 0.997	sem: 0.008	sem_self: 0.008	sem_word: 0.008	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0520	ntime: 0971	mem: 98.18 
+ 04-13 09:18:03 | l2 loss: 7.706746683190493e-08
+ 04-13 09:18:03 | lvel loss: 7.710096213732478e-05
+ 04-13 09:18:03 | fid score: 0.41652272337605645
+ 04-13 09:18:03 | align score: 0.7678022806992139
+ 04-13 09:18:03 | l1div score: 12.41799362747873
+ 04-13 09:18:03 | total inference time: 88 s for 956 s motion
+ 04-13 09:18:05 | Time info >>>>  elapsed: 92.17 mins	remain: 15.98 mins
+ 04-13 09:18:06 | [225][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.004	sem_self: 0.004	sem_word: 0.004	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0950	mem: 98.18 
+ 04-13 09:20:15 | l2 loss: 7.657557234692818e-08
+ 04-13 09:20:15 | lvel loss: 7.681811748752325e-05
+ 04-13 09:20:15 | fid score: 0.41704969331647046
+ 04-13 09:20:15 | align score: 0.766951457872121
+ 04-13 09:20:15 | l1div score: 12.422246927333685
+ 04-13 09:20:15 | total inference time: 88 s for 956 s motion
+ 04-13 09:20:16 | Time info >>>>  elapsed: 94.37 mins	remain: 15.87 mins
+ 04-13 09:20:18 | [226][000/029]  gate: 0.998	gate_self: 0.997	gate_word: 0.997	sem: 0.007	sem_self: 0.007	sem_word: 0.006	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0685	ntime: 0956	mem: 98.18 
+ 04-13 09:22:26 | l2 loss: 7.562820541062659e-08
+ 04-13 09:22:26 | lvel loss: 7.652486470618708e-05
+ 04-13 09:22:27 | fid score: 0.458793901667355
+ 04-13 09:22:27 | align score: 0.7700328230959235
+ 04-13 09:22:27 | l1div score: 12.421569918055033
+ 04-13 09:22:27 | total inference time: 88 s for 956 s motion
+ 04-13 09:22:28 | Time info >>>>  elapsed: 96.57 mins	remain: 15.74 mins
+ 04-13 09:22:29 | [227][000/029]  gate: 0.999	gate_self: 0.999	gate_word: 0.999	sem: 0.005	sem_self: 0.006	sem_word: 0.005	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0519	ntime: 0916	mem: 98.18 
+ 04-13 09:24:38 | l2 loss: 7.644159783882517e-08
+ 04-13 09:24:38 | lvel loss: 7.68600172757199e-05
+ 04-13 09:24:38 | fid score: 0.4226443526161905
+ 04-13 09:24:38 | align score: 0.7653585777503786
+ 04-13 09:24:38 | l1div score: 12.428736855192634
+ 04-13 09:24:38 | total inference time: 88 s for 956 s motion
+ 04-13 09:24:40 | Time info >>>>  elapsed: 98.76 mins	remain: 15.59 mins
+ 04-13 09:24:41 | [228][000/029]  gate: 0.992	gate_self: 0.993	gate_word: 0.989	sem: 0.027	sem_self: 0.028	sem_word: 0.029	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0944	mem: 98.18 
+ 04-13 09:26:50 | l2 loss: 7.62298955867537e-08
+ 04-13 09:26:50 | lvel loss: 7.679043322176649e-05
+ 04-13 09:26:50 | fid score: 0.41922685789295766
+ 04-13 09:26:50 | align score: 0.7675088235643092
+ 04-13 09:26:50 | l1div score: 12.430127330704954
+ 04-13 09:26:50 | total inference time: 88 s for 956 s motion
+ 04-13 09:26:52 | Time info >>>>  elapsed: 100.96 mins	remain: 15.43 mins
+ 04-13 09:26:53 | [229][000/029]  gate: 0.998	gate_self: 0.997	gate_word: 0.997	sem: 0.010	sem_self: 0.012	sem_word: 0.012	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0514	ntime: 0943	mem: 98.18 
+ 04-13 09:29:02 | l2 loss: 7.599106354554953e-08
+ 04-13 09:29:02 | lvel loss: 7.680860404609546e-05
+ 04-13 09:29:02 | fid score: 0.43862346179057443
+ 04-13 09:29:02 | align score: 0.7675315991993139
+ 04-13 09:29:02 | l1div score: 12.436888935601948
+ 04-13 09:29:02 | total inference time: 88 s for 956 s motion
+ 04-13 09:29:04 | Time info >>>>  elapsed: 103.16 mins	remain: 15.25 mins
+ 04-13 09:29:05 | [230][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.004	sem_self: 0.005	sem_word: 0.005	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0917	mem: 98.18 
+ 04-13 09:31:15 | l2 loss: 7.652178805932035e-08
+ 04-13 09:31:15 | lvel loss: 7.675424174603232e-05
+ 04-13 09:31:15 | fid score: 0.42398411547907155
+ 04-13 09:31:15 | align score: 0.7681916440247343
+ 04-13 09:31:15 | l1div score: 12.43847699646016
+ 04-13 09:31:15 | total inference time: 89 s for 956 s motion
+ 04-13 09:31:16 | Time info >>>>  elapsed: 105.37 mins	remain: 15.05 mins
+ 04-13 09:31:18 | [231][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.002	sem_self: 0.002	sem_word: 0.002	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0920	mem: 98.18 
+ 04-13 09:33:27 | l2 loss: 7.58342140505581e-08
+ 04-13 09:33:27 | lvel loss: 7.668914378877545e-05
+ 04-13 09:33:27 | fid score: 0.42796062337271934
+ 04-13 09:33:27 | align score: 0.7681497098000558
+ 04-13 09:33:27 | l1div score: 12.437158262003637
+ 04-13 09:33:27 | total inference time: 89 s for 956 s motion
+ 04-13 09:33:29 | Time info >>>>  elapsed: 107.58 mins	remain: 14.84 mins
+ 04-13 09:33:30 | [232][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.001	sem_self: 0.001	sem_word: 0.001	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0919	mem: 98.18 
+ 04-13 09:35:40 | l2 loss: 7.691785400111799e-08
+ 04-13 09:35:40 | lvel loss: 7.720038425515865e-05
+ 04-13 09:35:40 | fid score: 0.428868914125772
+ 04-13 09:35:40 | align score: 0.7660168195985578
+ 04-13 09:35:40 | l1div score: 12.440286647764166
+ 04-13 09:35:40 | total inference time: 89 s for 956 s motion
+ 04-13 09:35:41 | Time info >>>>  elapsed: 109.78 mins	remain: 14.61 mins
+ 04-13 09:35:43 | [233][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.001	sem_self: 0.001	sem_word: 0.001	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0512	ntime: 0923	mem: 98.18 
+ 04-13 09:37:51 | l2 loss: 7.651031018633698e-08
+ 04-13 09:37:51 | lvel loss: 7.688044727879942e-05
+ 04-13 09:37:51 | fid score: 0.43040534155796895
+ 04-13 09:37:51 | align score: 0.7680634799277076
+ 04-13 09:37:51 | l1div score: 12.437252619829803
+ 04-13 09:37:51 | total inference time: 88 s for 956 s motion
+ 04-13 09:37:53 | Time info >>>>  elapsed: 111.97 mins	remain: 14.36 mins
+ 04-13 09:37:54 | [234][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.001	sem_self: 0.001	sem_word: 0.001	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0919	mem: 98.18 
+ 04-13 09:40:03 | l2 loss: 7.675928457252455e-08
+ 04-13 09:40:03 | lvel loss: 7.70873841217078e-05
+ 04-13 09:40:03 | fid score: 0.4437921737992543
+ 04-13 09:40:03 | align score: 0.7691417436589516
+ 04-13 09:40:03 | l1div score: 12.431595298714303
+ 04-13 09:40:03 | total inference time: 88 s for 956 s motion
+ 04-13 09:40:04 | Time info >>>>  elapsed: 114.17 mins	remain: 14.09 mins
+ 04-13 09:40:06 | [235][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.001	sem_self: 0.001	sem_word: 0.001	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0984	mem: 98.18 
+ 04-13 09:42:16 | l2 loss: 7.714848077805312e-08
+ 04-13 09:42:16 | lvel loss: 7.732921737875216e-05
+ 04-13 09:42:16 | fid score: 0.41938555728460436
+ 04-13 09:42:16 | align score: 0.7723674274586025
+ 04-13 09:42:16 | l1div score: 12.42940455447859
+ 04-13 09:42:16 | total inference time: 88 s for 956 s motion
+ 04-13 09:42:18 | Time info >>>>  elapsed: 116.40 mins	remain: 13.81 mins
+ 04-13 09:42:19 | [236][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.001	sem_self: 0.001	sem_word: 0.001	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0513	ntime: 0941	mem: 98.18 
+ 04-13 09:44:28 | l2 loss: 7.712417376165036e-08
+ 04-13 09:44:28 | lvel loss: 7.715670312175981e-05
+ 04-13 09:44:28 | fid score: 0.4159626030343748
+ 04-13 09:44:28 | align score: 0.7706635987170212
+ 04-13 09:44:28 | l1div score: 12.428260992386507
+ 04-13 09:44:28 | total inference time: 88 s for 956 s motion
+ 04-13 09:44:30 | Time info >>>>  elapsed: 118.60 mins	remain: 13.51 mins
+ 04-13 09:44:31 | [237][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.001	sem_self: 0.001	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0914	mem: 98.18 
+ 04-13 09:46:40 | l2 loss: 7.710457562146232e-08
+ 04-13 09:46:40 | lvel loss: 7.726635023923279e-05
+ 04-13 09:46:40 | fid score: 0.41947049820671634
+ 04-13 09:46:40 | align score: 0.7655963678981095
+ 04-13 09:46:40 | l1div score: 12.430903707855318
+ 04-13 09:46:40 | total inference time: 88 s for 956 s motion
+ 04-13 09:46:42 | Time info >>>>  elapsed: 120.80 mins	remain: 13.20 mins
+ 04-13 09:46:43 | [238][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0933	mem: 98.18 
+ 04-13 09:48:53 | l2 loss: 7.685247079555823e-08
+ 04-13 09:48:53 | lvel loss: 7.710305371434094e-05
+ 04-13 09:48:53 | fid score: 0.42640614826713463
+ 04-13 09:48:53 | align score: 0.7670991212595698
+ 04-13 09:48:53 | l1div score: 12.430922124743446
+ 04-13 09:48:53 | total inference time: 89 s for 956 s motion
+ 04-13 09:48:55 | Time info >>>>  elapsed: 123.01 mins	remain: 12.87 mins
+ 04-13 09:48:56 | [239][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.001	sem_self: 0.001	sem_word: 0.001	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0915	mem: 98.18 
+ 04-13 09:51:06 | l2 loss: 7.589817068301679e-08
+ 04-13 09:51:06 | lvel loss: 7.651961435995102e-05
+ 04-13 09:51:06 | fid score: 0.44687824785737895
+ 04-13 09:51:06 | align score: 0.7661189565912251
+ 04-13 09:51:06 | l1div score: 12.42752738081618
+ 04-13 09:51:06 | total inference time: 89 s for 956 s motion
+ 04-13 09:51:07 | Time info >>>>  elapsed: 125.22 mins	remain: 12.52 mins
+ 04-13 09:51:09 | [240][000/029]  gate: 0.999	gate_self: 0.999	gate_word: 1.000	sem: 0.003	sem_self: 0.002	sem_word: 0.002	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0514	ntime: 0916	mem: 98.18 
+ 04-13 09:53:18 | l2 loss: 7.697305998415419e-08
+ 04-13 09:53:18 | lvel loss: 7.709640233629387e-05
+ 04-13 09:53:18 | fid score: 0.4286994536340245
+ 04-13 09:53:18 | align score: 0.7680598068160353
+ 04-13 09:53:18 | l1div score: 12.425450406567707
+ 04-13 09:53:18 | total inference time: 88 s for 956 s motion
+ 04-13 09:53:19 | Time info >>>>  elapsed: 127.42 mins	remain: 12.16 mins
+ 04-13 09:53:20 | [241][000/029]  gate: 0.993	gate_self: 0.993	gate_word: 0.994	sem: 0.024	sem_self: 0.023	sem_word: 0.024	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0924	mem: 98.18 
+ 04-13 09:55:29 | l2 loss: 7.641436772987801e-08
+ 04-13 09:55:29 | lvel loss: 7.689677116572643e-05
+ 04-13 09:55:29 | fid score: 0.43567592587193626
+ 04-13 09:55:29 | align score: 0.7671100324074939
+ 04-13 09:55:29 | l1div score: 12.42375663875106
+ 04-13 09:55:29 | total inference time: 88 s for 956 s motion
+ 04-13 09:55:30 | Time info >>>>  elapsed: 129.61 mins	remain: 11.78 mins
+ 04-13 09:55:32 | [242][000/029]  gate: 0.998	gate_self: 0.998	gate_word: 0.998	sem: 0.004	sem_self: 0.005	sem_word: 0.004	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0922	mem: 98.18 
+ 04-13 09:57:40 | l2 loss: 7.641211990662707e-08
+ 04-13 09:57:40 | lvel loss: 7.674570695134697e-05
+ 04-13 09:57:40 | fid score: 0.40562067914970257
+ 04-13 09:57:40 | align score: 0.7649474729551652
+ 04-13 09:57:40 | l1div score: 12.425883882787383
+ 04-13 09:57:40 | total inference time: 88 s for 956 s motion
+ 04-13 09:57:43 | Time info >>>>  elapsed: 131.82 mins	remain: 11.39 mins
+ 04-13 09:57:45 | [243][000/029]  gate: 0.998	gate_self: 0.998	gate_word: 0.997	sem: 0.007	sem_self: 0.008	sem_word: 0.011	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0915	mem: 98.18 
+ 04-13 09:59:53 | l2 loss: 7.651781393334862e-08
+ 04-13 09:59:53 | lvel loss: 7.68311740280531e-05
+ 04-13 09:59:54 | fid score: 0.4390740378867175
+ 04-13 09:59:54 | align score: 0.7673809323825633
+ 04-13 09:59:54 | l1div score: 12.423773947005936
+ 04-13 09:59:54 | total inference time: 88 s for 956 s motion
+ 04-13 09:59:55 | Time info >>>>  elapsed: 134.02 mins	remain: 10.98 mins
+ 04-13 09:59:56 | [244][000/029]  gate: 0.994	gate_self: 0.991	gate_word: 0.993	sem: 0.021	sem_self: 0.018	sem_word: 0.015	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0510	ntime: 0918	mem: 98.18 
+ 04-13 10:02:05 | l2 loss: 7.647692939699092e-08
+ 04-13 10:02:05 | lvel loss: 7.687531314290004e-05
+ 04-13 10:02:05 | fid score: 0.446339264584088
+ 04-13 10:02:05 | align score: 0.7681341258173768
+ 04-13 10:02:05 | l1div score: 12.425381550316915
+ 04-13 10:02:05 | total inference time: 88 s for 956 s motion
+ 04-13 10:02:07 | Time info >>>>  elapsed: 136.21 mins	remain: 10.56 mins
+ 04-13 10:02:08 | [245][000/029]  gate: 0.999	gate_self: 0.999	gate_word: 0.999	sem: 0.006	sem_self: 0.005	sem_word: 0.005	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0911	mem: 98.18 
+ 04-13 10:04:17 | l2 loss: 7.632079779246066e-08
+ 04-13 10:04:17 | lvel loss: 7.665408248439167e-05
+ 04-13 10:04:17 | fid score: 0.44355706575715104
+ 04-13 10:04:17 | align score: 0.7705812395268477
+ 04-13 10:04:17 | l1div score: 12.426449258050633
+ 04-13 10:04:17 | total inference time: 88 s for 956 s motion
+ 04-13 10:04:18 | Time info >>>>  elapsed: 138.41 mins	remain: 10.13 mins
+ 04-13 10:04:20 | [246][000/029]  gate: 0.999	gate_self: 0.999	gate_word: 0.999	sem: 0.003	sem_self: 0.003	sem_word: 0.003	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0910	mem: 98.18 
+ 04-13 10:06:29 | l2 loss: 7.695743711602251e-08
+ 04-13 10:06:29 | lvel loss: 7.715503051914365e-05
+ 04-13 10:06:29 | fid score: 0.42079035481564553
+ 04-13 10:06:29 | align score: 0.7669162789389244
+ 04-13 10:06:29 | l1div score: 12.431771685671704
+ 04-13 10:06:29 | total inference time: 88 s for 956 s motion
+ 04-13 10:06:30 | Time info >>>>  elapsed: 140.60 mins	remain: 9.68 mins
+ 04-13 10:06:32 | [247][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.001	sem_self: 0.001	sem_word: 0.002	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0513	ntime: 0916	mem: 98.18 
+ 04-13 10:08:40 | l2 loss: 7.636070554809789e-08
+ 04-13 10:08:40 | lvel loss: 7.686921051412599e-05
+ 04-13 10:08:40 | fid score: 0.42530433269071466
+ 04-13 10:08:40 | align score: 0.7612410867708136
+ 04-13 10:08:40 | l1div score: 12.43732799971619
+ 04-13 10:08:40 | total inference time: 88 s for 956 s motion
+ 04-13 10:08:42 | Time info >>>>  elapsed: 142.80 mins	remain: 9.21 mins
+ 04-13 10:08:43 | [248][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.003	sem_self: 0.003	sem_word: 0.003	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0911	mem: 98.18 
+ 04-13 10:10:53 | l2 loss: 7.668019421371568e-08
+ 04-13 10:10:53 | lvel loss: 7.702739818022143e-05
+ 04-13 10:10:53 | fid score: 0.4153229090062167
+ 04-13 10:10:53 | align score: 0.7652543676498196
+ 04-13 10:10:53 | l1div score: 12.436339762343598
+ 04-13 10:10:53 | total inference time: 89 s for 956 s motion
+ 04-13 10:10:54 | Time info >>>>  elapsed: 145.00 mins	remain: 8.74 mins
+ 04-13 10:10:56 | [249][000/029]  gate: 1.000	gate_self: 0.999	gate_word: 1.000	sem: 0.003	sem_self: 0.004	sem_word: 0.003	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0513	ntime: 1059	mem: 98.18 
+ 04-13 10:13:05 | l2 loss: 7.671560532194701e-08
+ 04-13 10:13:05 | lvel loss: 7.699796057408845e-05
+ 04-13 10:13:05 | fid score: 0.4171757374336549
+ 04-13 10:13:05 | align score: 0.7646207726078257
+ 04-13 10:13:05 | l1div score: 12.436967807797345
+ 04-13 10:13:05 | total inference time: 89 s for 956 s motion
+ 04-13 10:13:07 | Time info >>>>  elapsed: 147.22 mins	remain: 8.24 mins
+ 04-13 10:13:08 | [250][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0919	mem: 98.18 
+ 04-13 10:15:18 | l2 loss: 7.691828086536472e-08
+ 04-13 10:15:18 | lvel loss: 7.709797786221083e-05
+ 04-13 10:15:18 | fid score: 0.43193055690461524
+ 04-13 10:15:18 | align score: 0.7709719903042251
+ 04-13 10:15:18 | l1div score: 12.434594198020585
+ 04-13 10:15:18 | total inference time: 89 s for 956 s motion
+ 04-13 10:15:20 | Time info >>>>  elapsed: 149.43 mins	remain: 7.74 mins
+ 04-13 10:15:21 | [251][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0520	ntime: 0921	mem: 98.18 
+ 04-13 10:17:31 | l2 loss: 7.618939266238581e-08
+ 04-13 10:17:31 | lvel loss: 7.665567385911002e-05
+ 04-13 10:17:31 | fid score: 0.4130897365094537
+ 04-13 10:17:31 | align score: 0.7652994438147152
+ 04-13 10:17:31 | l1div score: 12.432217998349723
+ 04-13 10:17:31 | total inference time: 89 s for 956 s motion
+ 04-13 10:17:33 | Time info >>>>  elapsed: 151.65 mins	remain: 7.22 mins
+ 04-13 10:17:34 | [252][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0517	ntime: 0961	mem: 98.18 
+ 04-13 10:19:44 | l2 loss: 7.713225004457499e-08
+ 04-13 10:19:44 | lvel loss: 7.718478261306914e-05
+ 04-13 10:19:44 | fid score: 0.41324998887399644
+ 04-13 10:19:44 | align score: 0.7682773938972031
+ 04-13 10:19:44 | l1div score: 12.431705055562977
+ 04-13 10:19:44 | total inference time: 89 s for 956 s motion
+ 04-13 10:19:46 | Time info >>>>  elapsed: 153.86 mins	remain: 6.69 mins
+ 04-13 10:19:47 | [253][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0519	ntime: 0926	mem: 98.18 
+ 04-13 10:21:57 | l2 loss: 7.67524651202847e-08
+ 04-13 10:21:57 | lvel loss: 7.690864926293548e-05
+ 04-13 10:21:57 | fid score: 0.42102650913304007
+ 04-13 10:21:57 | align score: 0.7677617686955474
+ 04-13 10:21:57 | l1div score: 12.430373195626151
+ 04-13 10:21:57 | total inference time: 89 s for 956 s motion
+ 04-13 10:21:58 | Time info >>>>  elapsed: 156.07 mins	remain: 6.14 mins
+ 04-13 10:22:00 | [254][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0914	mem: 98.18 
+ 04-13 10:24:08 | l2 loss: 7.716474965637883e-08
+ 04-13 10:24:08 | lvel loss: 7.712832311817933e-05
+ 04-13 10:24:08 | fid score: 0.41146985382540446
+ 04-13 10:24:08 | align score: 0.7685610752510195
+ 04-13 10:24:08 | l1div score: 12.428493106244138
+ 04-13 10:24:08 | total inference time: 88 s for 956 s motion
+ 04-13 10:24:10 | Time info >>>>  elapsed: 158.27 mins	remain: 5.59 mins
+ 04-13 10:24:11 | [255][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0963	mem: 98.18 
+ 04-13 10:26:20 | l2 loss: 7.641425854809925e-08
+ 04-13 10:26:20 | lvel loss: 7.687103857970316e-05
+ 04-13 10:26:20 | fid score: 0.41913908968793123
+ 04-13 10:26:20 | align score: 0.7682803530811371
+ 04-13 10:26:20 | l1div score: 12.427202521666581
+ 04-13 10:26:20 | total inference time: 88 s for 956 s motion
+ 04-13 10:26:22 | Time info >>>>  elapsed: 160.46 mins	remain: 5.01 mins
+ 04-13 10:26:23 | [256][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0915	mem: 98.18 
+ 04-13 10:28:32 | l2 loss: 7.730387532332425e-08
+ 04-13 10:28:32 | lvel loss: 7.731341852675318e-05
+ 04-13 10:28:32 | fid score: 0.4259558113884685
+ 04-13 10:28:32 | align score: 0.7665178753984941
+ 04-13 10:28:32 | l1div score: 12.426196195774017
+ 04-13 10:28:32 | total inference time: 88 s for 956 s motion
+ 04-13 10:28:33 | Time info >>>>  elapsed: 162.65 mins	remain: 4.43 mins
+ 04-13 10:28:34 | [257][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0922	mem: 98.18 
+ 04-13 10:30:43 | l2 loss: 7.677908350644104e-08
+ 04-13 10:30:44 | lvel loss: 7.696823188601545e-05
+ 04-13 10:30:44 | fid score: 0.41579909212980937
+ 04-13 10:30:44 | align score: 0.765858288073817
+ 04-13 10:30:44 | l1div score: 12.425625444586437
+ 04-13 10:30:44 | total inference time: 88 s for 956 s motion
+ 04-13 10:30:45 | Time info >>>>  elapsed: 164.85 mins	remain: 3.83 mins
+ 04-13 10:30:46 | [258][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0515	ntime: 0914	mem: 98.18 
+ 04-13 10:32:55 | l2 loss: 7.692670421373097e-08
+ 04-13 10:32:55 | lvel loss: 7.725156904000957e-05
+ 04-13 10:32:55 | fid score: 0.43368717261864287
+ 04-13 10:32:55 | align score: 0.7689628700860158
+ 04-13 10:32:55 | l1div score: 12.427136577554771
+ 04-13 10:32:55 | total inference time: 88 s for 956 s motion
+ 04-13 10:32:57 | Time info >>>>  elapsed: 167.04 mins	remain: 3.22 mins
+ 04-13 10:32:58 | [259][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0512	ntime: 0953	mem: 98.18 
+ 04-13 10:35:08 | l2 loss: 7.685058759320855e-08
+ 04-13 10:35:08 | lvel loss: 7.719260279100253e-05
+ 04-13 10:35:08 | fid score: 0.4296520089825586
+ 04-13 10:35:08 | align score: 0.7713948570171423
+ 04-13 10:35:08 | l1div score: 12.426502819239092
+ 04-13 10:35:08 | total inference time: 89 s for 956 s motion
+ 04-13 10:35:09 | Time info >>>>  elapsed: 169.25 mins	remain: 2.60 mins
+ 04-13 10:35:11 | [260][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0513	ntime: 0967	mem: 98.18 
+ 04-13 10:37:20 | l2 loss: 7.728440205036885e-08
+ 04-13 10:37:20 | lvel loss: 7.74128076034183e-05
+ 04-13 10:37:20 | fid score: 0.42520476736595114
+ 04-13 10:37:20 | align score: 0.7651497802847606
+ 04-13 10:37:20 | l1div score: 12.427838901892269
+ 04-13 10:37:20 | total inference time: 89 s for 956 s motion
+ 04-13 10:37:22 | Time info >>>>  elapsed: 171.46 mins	remain: 1.97 mins
+ 04-13 10:37:23 | [261][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0946	mem: 98.18 
+ 04-13 10:39:33 | l2 loss: 7.675502581423199e-08
+ 04-13 10:39:33 | lvel loss: 7.706317836038003e-05
+ 04-13 10:39:33 | fid score: 0.4176682304041526
+ 04-13 10:39:33 | align score: 0.7696488595707254
+ 04-13 10:39:33 | l1div score: 12.42555522369613
+ 04-13 10:39:33 | total inference time: 89 s for 956 s motion
+ 04-13 10:39:35 | Time info >>>>  elapsed: 173.67 mins	remain: 1.33 mins
+ 04-13 10:39:36 | [262][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0518	ntime: 0919	mem: 98.18 
+ 04-13 10:41:46 | l2 loss: 7.705986550468191e-08
+ 04-13 10:41:46 | lvel loss: 7.707351243240802e-05
+ 04-13 10:41:46 | fid score: 0.42386377627718375
+ 04-13 10:41:46 | align score: 0.7661482826218172
+ 04-13 10:41:46 | l1div score: 12.42438053287145
+ 04-13 10:41:46 | total inference time: 89 s for 956 s motion
+ 04-13 10:41:47 | Time info >>>>  elapsed: 175.89 mins	remain: 0.67 mins
+ 04-13 10:41:49 | [263][000/029]  gate: 1.000	gate_self: 1.000	gate_word: 1.000	sem: 0.000	sem_self: 0.000	sem_word: 0.000	latent: 0.000	cls_full: 0.000	cls_self: 0.000	cls_word: 0.000	latent_word: 0.000	latent_self: 0.000	glr: 5.0e-05	dtime: 0516	ntime: 0917	mem: 98.18 
+ 04-13 10:43:59 | l2 loss: 7.69791748207937e-08
+ 04-13 10:43:59 | lvel loss: 7.704202332182377e-05
+ 04-13 10:43:59 | fid score: 0.4197490667787074
+ 04-13 10:43:59 | align score: 0.7661977517911469
+ 04-13 10:43:59 | l1div score: 12.418612079274538
+ 04-13 10:43:59 | total inference time: 89 s for 956 s motion
+ 04-13 10:44:00 | Time info >>>>  elapsed: 178.10 mins	remain: -0.00 mins
+ 04-13 10:45:29 | l2 loss: 7.69791748207937e-08
+ 04-13 10:45:29 | lvel loss: 7.704202332182377e-05
+ 04-13 10:45:29 | fid score: 0.4197490667787074
+ 04-13 10:45:29 | align score: 0.7661977517911469
+ 04-13 10:45:29 | l1div score: 12.412986056630636
+ 04-13 10:45:29 | total inference time: 88 s for 956 s motion

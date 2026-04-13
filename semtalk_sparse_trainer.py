@@ -62,7 +62,7 @@ class CustomTrainer(train.BaseTrainer):
         for joint_name in self.tar_joint_list_lower:
             self.joint_mask_lower[self.ori_joint_list[joint_name][1] - self.ori_joint_list[joint_name][0]:self.ori_joint_list[joint_name][1]] = 1
 
-        self.tracker = other_tools.EpochTracker([ "reg","reg_s","reg_w","gate","gate_self","gate_word","sem","sem_self","sem_word", "hubert","beat","hubert_sem","beat_sem", "acc_face", "acc_hands", "acc_upper", "acc_lower", "fid", "l1div", "bc", "rec", "trans", "vel", "transv", 'dis', 'gen', 'acc', 'transa', 'exp', 'lvd', 'mse', "cls", "rec_face", "latent", "cls_full", "cls_self", "cls_word", "latent_word","latent_self", "kl_val","kl_self","kl_word","vib_beta","gate_mu_norm","phys_jerk","phys_beta"], [False,True,True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False,False,False,False,  False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False, False,False,False,False,False,False,False])
+        self.tracker = other_tools.EpochTracker([ "reg","reg_s","reg_w","gate","gate_self","gate_word","sem","sem_self","sem_word", "hubert","beat","hubert_sem","beat_sem", "acc_face", "acc_hands", "acc_upper", "acc_lower", "fid", "l1div", "bc", "rec", "trans", "vel", "transv", 'dis', 'gen', 'acc', 'transa', 'exp', 'lvd', 'mse', "cls", "rec_face", "latent", "cls_full", "cls_self", "cls_word", "latent_word","latent_self", "kl_val","kl_self","kl_word","vib_beta","gate_mu_norm","phys_jerk","phys_beta","jerk_fused","gate_smooth","contrast","gate_mean"], [False,True,True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False,False,False,False,  False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False, False,False,False,False,False,False,False,False,False,False,False])
         ##### vq_model #####
         vq_model_module = __import__(f"models.motion_representation", fromlist=["something"])
         rvq_model_module = __import__(f"models.rvq", fromlist=["something"])
@@ -174,6 +174,13 @@ class CustomTrainer(train.BaseTrainer):
         self._vib_warmup_end   = getattr(args, 'vib_warmup_end',   100)
         self._vib_free_bits    = getattr(args, 'vib_free_bits',     0.5)
 
+        # ── Latent loss gating mode ──
+        # "gt_mask"   (default, legacy): multiply latent loss by GT sem_mean → zero on 90% of frames
+        # "pred_gate": weight by detached predicted gate: sem_boost*ψ + (1-ψ), trains on ALL frames
+        # "uniform":   no masking, latent loss on all frames equally
+        self._latent_loss_mode = getattr(args, 'latent_loss_mode', 'gt_mask')
+        self._sem_boost = getattr(args, 'sem_boost', 3.0)  # how much more weight on semantic frames
+
         # ── Contrastive margin loss ──
         self._contrast_enabled = getattr(args, 'contrast_enabled', False)
         self._contrast_weight  = getattr(args, 'contrast_weight', 0.1)
@@ -181,10 +188,18 @@ class CustomTrainer(train.BaseTrainer):
 
         # ── Physics Smoother (gate-modulated per-joint EMA) ──
         self._phys_enabled = getattr(args, 'phys_enabled', True)
+        self._phys_upper_only = getattr(args, 'phys_upper_only', False)
         self._phys_train_enabled = getattr(args, 'phys_train_enabled', True)
         self._phys_lambda       = getattr(args, 'phys_lambda',       0.01)
+        self._phys_hands_lambda = getattr(args, 'phys_hands_lambda', 1.0)
         self._phys_warmup_start = getattr(args, 'phys_warmup_start', 30)
         self._phys_warmup_end   = getattr(args, 'phys_warmup_end',   80)
+        # Option 1: fused latent jerk (gate-blended sparse+base latent, no decoder pass)
+        self._phys_fused_latent = getattr(args, 'phys_fused_latent', False)
+        self._phys_fused_lambda = getattr(args, 'phys_fused_lambda', 0.10)
+        # Option 3: gate temporal smoothing (penalises abrupt ψ transitions)
+        self._gate_smooth_weight = getattr(args, 'gate_smooth_weight', 0.0)
+        self._gate_mean_weight = getattr(args, 'gate_mean_weight', 0.0)
         if self._phys_enabled:
             self.physics_smoother = PhysicsSmootherSMPLX(
                 num_joints=self.joints,
@@ -237,6 +252,43 @@ class CustomTrainer(train.BaseTrainer):
         import math
         sig = 1.0 / (1.0 + math.exp(-6.0 * (t - 0.5)))
         return self._phys_lambda * sig
+
+    def _compute_latent_weight(self, sem_mean, gate_class_pred):
+        """Compute per-frame weight for latent reconstruction loss.
+
+        Returns a tensor broadcastable to the latent loss shape.
+        Modes:
+          gt_mask   — legacy: weight = sem_mean (binary), zeros on non-semantic
+          pred_gate — weight = sem_boost * ψ_detached + (1 − ψ_detached), trains all frames
+          uniform   — weight = 1 everywhere
+        """
+        mode = self._latent_loss_mode
+        if mode == 'gt_mask':
+            return sem_mean.unsqueeze(1).unsqueeze(2).unsqueeze(-1)
+        elif mode == 'pred_gate':
+            psi = gate_class_pred[:, :, 1].detach()  # [B, T'] soft semantic prob
+            w = self._sem_boost * psi + (1.0 - psi)  # semantic frames boosted, rest = 1
+            return w.unsqueeze(1).unsqueeze(2).unsqueeze(-1)
+        elif mode == 'uniform':
+            return 1.0
+        else:
+            raise ValueError(f"Unknown latent_loss_mode: {mode}")
+
+    def _compute_cls_weight(self, sem_mean, gate_class_pred):
+        """Compute per-frame weight for classification loss.
+
+        Same modes as _compute_latent_weight but returns [B, T'] shape.
+        """
+        mode = self._latent_loss_mode
+        if mode == 'gt_mask':
+            return sem_mean
+        elif mode == 'pred_gate':
+            psi = gate_class_pred[:, :, 1].detach()
+            return self._sem_boost * psi + (1.0 - psi)
+        elif mode == 'uniform':
+            return 1.0
+        else:
+            raise ValueError(f"Unknown latent_loss_mode: {mode}")
 
     def inverse_selection(self, filtered_t, selection_array, n):
         original_shape_t = np.zeros((n, selection_array.size))
@@ -316,7 +368,8 @@ class CustomTrainer(train.BaseTrainer):
         correct_gate_val = (gate_class_val == sem_label).sum().item()
         acc_gate_val = correct_gate_val / total_sem_label
         self.tracker.update_meter("gate", "train", acc_gate_val)
-        gate_expanded = sem_mean.unsqueeze(1).unsqueeze(2).unsqueeze(-1)
+        gate_expanded = self._compute_latent_weight(sem_mean, gate_class_pred_val)
+        cls_weight = self._compute_cls_weight(sem_mean, gate_class_pred_val)
         
         loss_latent_lower = loss_latent_lower * gate_expanded
         loss_latent_hands = loss_latent_hands * gate_expanded
@@ -424,15 +477,61 @@ class CustomTrainer(train.BaseTrainer):
             else:
                 tau_upper, tau_hands, tau_lower = tau_upper_tp, tau_hands_tp, tau_lower_tp
 
-            phys_jerk = (
-                self.physics_smoother.compute_pose_jerk_loss(dec_upper_6d, tau_upper)
-                + self.physics_smoother.compute_pose_jerk_loss(dec_hands_6d, tau_hands)
-                + self.physics_smoother.compute_pose_jerk_loss(dec_lower_6d, tau_lower)
-            )
+            # Physics jerk loss — arm_combined_core validated on GT:
+            # only upper body (spine + arms + wrists) benefits from physics prior.
+            # Hands (fingers) and lower body add noise (negative delta R²).
+            phys_jerk = self.physics_smoother.compute_pose_jerk_loss(dec_upper_6d, tau_upper)
+            if not self._phys_upper_only:
+                phys_jerk_hands = self.physics_smoother.compute_pose_jerk_loss(dec_hands_6d, tau_hands)
+                phys_jerk = phys_jerk + (
+                    self._phys_hands_lambda * phys_jerk_hands
+                    + self.physics_smoother.compute_pose_jerk_loss(dec_lower_6d, tau_lower)
+                )
             g_loss_final = g_loss_final + phys_beta * phys_jerk
             self.tracker.update_meter("phys_jerk", "train", phys_jerk.item())
             self.tracker.update_meter("phys_beta", "train", phys_beta)
-       
+
+        # ── Option 1: Fused latent jerk ──────────────────────────────────────
+        # Penalises jerk of (ψ·sparse + (1−ψ)·base) latent — covers ALL frames.
+        # No decoder pass needed; gradient flows through sparse prediction + gate.
+        # Base latent is detached so we only train the sparse model.
+        phys_beta = self._compute_phys_beta(epoch)  # reuse same warmup schedule
+        if self._phys_fused_latent and phys_beta > 0:
+            sp_f_upper = net_out_val["rec_upper"][:, 0, 0]           # [B, T', C]
+            sp_f_hands = net_out_val["rec_hands"][:, 0, 0]
+            sp_f_lower = net_out_val["rec_lower"][:, 0, 0]
+            ba_f_upper = latent_val['upper_latent'].detach()          # [B, T', C]
+            ba_f_hands = latent_val['hands_latent'].detach()
+            ba_f_lower = latent_val['lower_latent'].detach()
+            gate_psi = gate_class_pred_val[:, :, 1:2]                 # [B, T', 1] — NOT detached; gradient into gate too
+            fused_upper = gate_psi * sp_f_upper + (1.0 - gate_psi) * ba_f_upper
+            fused_hands = gate_psi * sp_f_hands + (1.0 - gate_psi) * ba_f_hands
+            fused_lower = gate_psi * sp_f_lower + (1.0 - gate_psi) * ba_f_lower
+            # 2nd finite difference ≈ acceleration; mean over C and B
+            def _latent_jerk(x):
+                return (x[:, 2:] - 2.0 * x[:, 1:-1] + x[:, :-2]).pow(2).mean()
+            jerk_fused = (_latent_jerk(fused_upper) + _latent_jerk(fused_hands) + _latent_jerk(fused_lower)) / 3.0
+            g_loss_final = g_loss_final + phys_beta * self._phys_fused_lambda * jerk_fused
+            self.tracker.update_meter("jerk_fused", "train", jerk_fused.item())
+
+        # ── Option 3: Gate temporal smoothing ────────────────────────────────
+        # Penalises abrupt ψ transitions between frames: avoids motion pops at
+        # beat→semantic→beat boundaries.  Gradient flows through gate directly.
+        if self._gate_smooth_weight > 0.0:
+            gate_psi_seq = gate_class_pred_val[:, :, 1]               # [B, T']
+            gate_smooth = (gate_psi_seq[:, 1:] - gate_psi_seq[:, :-1]).pow(2).mean()
+            g_loss_final = g_loss_final + self._gate_smooth_weight * gate_smooth
+            self.tracker.update_meter("gate_smooth", "train", gate_smooth.item())
+
+        # ── Gate mean penalty ─────────────────────────────────────────────────
+        # Directly penalises mean(ψ): always-on gate (ψ≈1 everywhere) incurs a
+        # large constant cost, forcing selective activation on semantic frames.
+        # Gradient flows through softmax → gate predictor weights.
+        if self._gate_mean_weight > 0.0:
+            gate_mean_val = gate_class_pred_val[:, :, 1].mean()
+            g_loss_final = g_loss_final + self._gate_mean_weight * gate_mean_val
+            self.tracker.update_meter("gate_mean", "train", gate_mean_val.item())
+
         self.now_epoch += 1
        
         loss_cls = 0
@@ -445,9 +544,9 @@ class CustomTrainer(train.BaseTrainer):
             rec_index_upper_val = self.log_softmax(net_out_val["cls_upper"][:,:,:,i])
             rec_index_lower_val = self.log_softmax(net_out_val["cls_lower"][:,:,:,i])
             rec_index_hands_val = self.log_softmax(net_out_val["cls_hands"][:,:,:,i])
-            loss_cls_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_val.transpose(1, 2), tar_index_value_upper_top[:, :, i]))*sem_mean).mean()
-            loss_cls_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_val.transpose(1, 2), tar_index_value_lower_top[:, :, i]))*sem_mean).mean()
-            loss_cls_i_hands = ((self.args.ch*self.cls_loss(rec_index_hands_val.transpose(1, 2), tar_index_value_hands_top[:, :,i]))*sem_mean).mean()
+            loss_cls_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_val.transpose(1, 2), tar_index_value_upper_top[:, :, i]))*cls_weight).mean()
+            loss_cls_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_val.transpose(1, 2), tar_index_value_lower_top[:, :, i]))*cls_weight).mean()
+            loss_cls_i_hands = ((self.args.ch*self.cls_loss(rec_index_hands_val.transpose(1, 2), tar_index_value_hands_top[:, :,i]))*cls_weight).mean()
             # if epoch > -1:
             #     loss_cls_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_val.transpose(1, 2), tar_index_value_upper_top[:, :, i]))*gate_class_1).mean()
             #     loss_cls_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_val.transpose(1, 2), tar_index_value_lower_top[:, :, i]))*gate_class_1).mean()
@@ -509,9 +608,10 @@ class CustomTrainer(train.BaseTrainer):
             #     loss_latent_lower_self = loss_latent_lower_self * (2*gate_expanded_self_detach+(1-gate_expanded_self_detach))
             #     loss_latent_hands_self = loss_latent_hands_self * (2*gate_expanded_self_detach+(1-gate_expanded_self_detach))
             #     loss_latent_upper_self = loss_latent_upper_self * (2*gate_expanded_self_detach+(1-gate_expanded_self_detach))
-            loss_latent_lower_self = loss_latent_lower_self *  gate_expanded
-            loss_latent_hands_self = loss_latent_hands_self * gate_expanded
-            loss_latent_upper_self = loss_latent_upper_self * gate_expanded
+            gate_expanded_self = self._compute_latent_weight(sem_mean, gate_class_self_pre)
+            loss_latent_lower_self = loss_latent_lower_self * gate_expanded_self
+            loss_latent_hands_self = loss_latent_hands_self * gate_expanded_self
+            loss_latent_upper_self = loss_latent_upper_self * gate_expanded_self
             loss_latent_lower_self = loss_latent_lower_self.mean()
             loss_latent_hands_self = loss_latent_hands_self.mean()
             loss_latent_upper_self = loss_latent_upper_self.mean()
@@ -524,9 +624,10 @@ class CustomTrainer(train.BaseTrainer):
                 rec_index_lower_self = self.log_softmax(net_out_self["cls_lower"][:,:,:,i])
                 rec_index_hands_self = self.log_softmax(net_out_self["cls_hands"][:,:,:,i])
                 
-                index_loss_top_self_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_self.transpose(1, 2), tar_index_value_upper_top[:,:,i]))*sem_mean).mean()
-                index_loss_top_self_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_self.transpose(1, 2), tar_index_value_lower_top[:,:,i]))*sem_mean).mean()
-                index_loss_top_self_i_hands = ((self.args.ch*self.cls_loss(rec_index_hands_self.transpose(1, 2), tar_index_value_hands_top[:,:,i]))*sem_mean).mean()
+                cls_weight_self = self._compute_cls_weight(sem_mean, gate_class_self_pre)
+                index_loss_top_self_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_self.transpose(1, 2), tar_index_value_upper_top[:,:,i]))*cls_weight_self).mean()
+                index_loss_top_self_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_self.transpose(1, 2), tar_index_value_lower_top[:,:,i]))*cls_weight_self).mean()
+                index_loss_top_self_i_hands = ((self.args.ch*self.cls_loss(rec_index_hands_self.transpose(1, 2), tar_index_value_hands_top[:,:,i]))*cls_weight_self).mean()
                 # if epoch > -1:
                 #     index_loss_top_self_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_self.transpose(1, 2), tar_index_value_upper_top[:,:,i]))*gate_class_2).mean()
                 #     index_loss_top_self_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_self.transpose(1, 2), tar_index_value_lower_top[:,:,i]))*gate_class_2).mean()
@@ -581,9 +682,10 @@ class CustomTrainer(train.BaseTrainer):
             #     loss_latent_lower_word = loss_latent_lower_word * (2*gate_expanded_word_detach+(1-gate_expanded_word_detach))
             #     loss_latent_hands_word = loss_latent_hands_word * (2*gate_expanded_word_detach+(1-gate_expanded_word_detach))
             #     loss_latent_upper_word = loss_latent_upper_word * (2*gate_expanded_word_detach+(1-gate_expanded_word_detach))
-            loss_latent_lower_word = loss_latent_lower_word * gate_expanded
-            loss_latent_hands_word = loss_latent_hands_word * gate_expanded
-            loss_latent_upper_word = loss_latent_upper_word * gate_expanded
+            gate_expanded_word = self._compute_latent_weight(sem_mean, gate_class_word_pre)
+            loss_latent_lower_word = loss_latent_lower_word * gate_expanded_word
+            loss_latent_hands_word = loss_latent_hands_word * gate_expanded_word
+            loss_latent_upper_word = loss_latent_upper_word * gate_expanded_word
             loss_latent_lower_word = loss_latent_lower_word.mean()
             loss_latent_hands_word = loss_latent_hands_word.mean()
             loss_latent_upper_word = loss_latent_upper_word.mean()
@@ -595,9 +697,10 @@ class CustomTrainer(train.BaseTrainer):
                 rec_index_upper_word = self.log_softmax(net_out_word["cls_upper"][:,:,:,i])
                 rec_index_lower_word = self.log_softmax(net_out_word["cls_lower"][:,:,:,i])
                 rec_index_hands_word = self.log_softmax(net_out_word["cls_hands"][:,:,:,i])
-                index_loss_top_word_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_word.transpose(1, 2), tar_index_value_upper_top[:,:,i]))*sem_mean).mean()
-                index_loss_top_word_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_word.transpose(1, 2), tar_index_value_lower_top[:,:,i]))*sem_mean).mean()
-                index_loss_top_word_i_hands = ((self.args.ch*self.cls_loss(rec_index_hands_word.transpose(1, 2), tar_index_value_hands_top[:,:,i]))*sem_mean).mean()
+                cls_weight_word = self._compute_cls_weight(sem_mean, gate_class_word_pre)
+                index_loss_top_word_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_word.transpose(1, 2), tar_index_value_upper_top[:,:,i]))*cls_weight_word).mean()
+                index_loss_top_word_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_word.transpose(1, 2), tar_index_value_lower_top[:,:,i]))*cls_weight_word).mean()
+                index_loss_top_word_i_hands = ((self.args.ch*self.cls_loss(rec_index_hands_word.transpose(1, 2), tar_index_value_hands_top[:,:,i]))*cls_weight_word).mean()
                 # if epoch > -1:
                 #     index_loss_top_word_i_upper = ((self.args.cu*self.cls_loss(rec_index_upper_word.transpose(1, 2), tar_index_value_upper_top[:,:,i]))*gate_class_3).mean()
                 #     index_loss_top_word_i_lower =  ((self.args.cl*self.cls_loss(rec_index_lower_word.transpose(1, 2), tar_index_value_lower_top[:,:,i]))*gate_class_3).mean()
@@ -858,6 +961,21 @@ class CustomTrainer(train.BaseTrainer):
                 torch.cat(gate_logvar_all, dim=1)
                 if len(gate_logvar_all) > 0 else None
             )
+            # Log τ statistics at inference for analysis
+            with torch.no_grad():
+                _tau_dbg = self.physics_smoother.compute_tau(gate_psi_cat, gate_logvar_cat)
+                _psi_mean = gate_psi_cat.mean().item()
+                _tau_mean = _tau_dbg.mean().item()
+                _tau_max  = _tau_dbg.max().item()
+                _sem_frac = (gate_psi_cat.squeeze(-1) > 0.5).float().mean().item()
+                if not hasattr(self, '_tau_log_count'):
+                    self._tau_log_count = 0
+                if self._tau_log_count % 50 == 0:
+                    logger.info(
+                        f"[phys-infer] ψ_mean={_psi_mean:.3f}  sem_frac={_sem_frac:.3f}  "
+                        f"τ_mean={_tau_mean:.4f}  τ_max={_tau_max:.4f}"
+                    )
+                self._tau_log_count += 1
             rec_pose_6d = rec_pose.reshape(bs, n, j, 6)
             rec_pose_6d = self.physics_smoother.forward_inference(
                 rec_pose_6d,

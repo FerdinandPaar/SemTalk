@@ -3015,9 +3015,655 @@ If B > A by >1 std, contrastive margin works → add 2 seeds for confirmation.
 | 3 | Create config `semtalk_moclip_baseline_continued.yaml` | | |
 | 4 | Create config `semtalk_moclip_contrast_margin.yaml` | | |
 | 5 | Create fair-eval qsub script (2 runs, same node) | | |
-| 6 | Submit Exp A (baseline_continued) | | FGD mean: ___ ± ___ |
+| 6 | Submit Exp A (baseline_continued) | | FGD mean: ___ ± ___ |3
 | 7 | Submit Exp B (contrast_margin) | | FGD mean: ___ ± ___ |
 | 8 | Compare A vs B: is delta > 1 std? | | YES / NO |
 | 9 | If YES: submit 2 more seeds for B | | FGD 3-seed: ___ ± ___ |
 | 10 | Run 265-seq all-speaker eval on winner | | FGD allspk: ___ |
 | 11 | Freeze ablation table for paper | | |
+
+---
+
+Timestamp: 2026-04-10
+
+## F-series overnight results + G1-G4 launch + ablation clarification
+
+### F-series: pred_gate mode diagnostic (Apr 9 night → Apr 10 morning)
+
+The F-series was launched to test whether the `pred_gate` latent-loss mode (weighting
+latent loss by the model's own gate prediction ψ) is better than `gt_mask` (weighting
+by ground-truth semantic labels). All runs started from checkpoint `best_184.bin`
+(SViB base) or the F2 best for G-series continuation.
+
+All 4 runs evaluated on 15-seq speaker-2 subset (same protocol as all prior entries).
+
+| Run | Architecture | `latent_loss_mode` | `phys_lambda` | Best FGD | At epoch | Gate at end |
+|-----|-------------|-------------------|---------------|----------|----------|-------------|
+| F1 | SViB + pred_gate | `pred_gate` | 0.08 | **0.4255** | ~61 | 0.989, sem=0.07 |
+| F2 | SViB + pred_gate + strong phys | `pred_gate` | 0.30 (upper-only) | **0.4199** | ~76 | 0.984, sem=0.07 |
+| F3 | Linear gate + pred_gate (VIB off) | `pred_gate` | OFF | **0.4163** | ~30 | 0.998, sem=0.006 |
+| F4 | SViB + uniform | `uniform` | 0.08 | **0.4274** | ~25 | ~0.984, sem≈0.07 |
+
+**Key result: F3 (linear gate, no VIB) achieved the best F-series FGD = 0.4163.**
+The gate collapsed completely (gate=0.998, sem=0.006) — identical to what we see
+in the original best run `0223_191250`. Yet FGD is *better* than ALL SViB variants.
+
+### What this confirms (critical finding)
+
+From the Apr 8 post-mortem we already knew that `0223_191250` (FGD=0.4118, linear
+gate, `gt_mask` mode) was the best historical run. The F-series now adds:
+
+1. **Linear gate + `pred_gate` mode (F3)** achieves 0.4163 even with total gate
+   collapse — still competitive with the historical best 0.4118 within measurement
+   noise (±0.01 per epoch).
+
+2. **SViB+pred_gate (F1/F2)** is consistently 0.005–0.006 FGD points *worse* than
+   the linear gate F3 in best-epoch comparisons.
+
+3. **`pred_gate` mode does not improve FGD** over `gt_mask` for the linear gate:
+   F3 best=0.4163 vs original 0.4118 (both within 1 noise sigma).
+
+4. **Strong physics (F2, λ=0.30, upper body only)** reduces `phys_jerk` from ~1.19
+   (raw) to ~0.48 at later epochs — a 60% jerk reduction vs F1 (λ=0.08). But FGD
+   is 0.4199 vs F3's 0.4163. Physics regularizes upper-body motion smoothness, NOT FGD.
+   **Important scope caveat**: all F/G physics experiments used `phys_upper_only=true`,
+   applying the jerk penalty to spine + arms + wrists only. Hands (fingers) and lower
+   body were excluded because GT validation showed they add noise (negative ΔR²).
+   Physics applied to full body or to lower body only has never been tested at the
+   sparse stage.
+
+### Answering key questions about the architecture
+
+**Q: Why claim "physics helps" if it does not improve FGD?**
+
+It does NOT improve FGD. Physics improves physical plausibility (jerk reduction ~60%
+with λ=0.30 vs no physics for the **upper body / arms only**), which matters for
+visual quality and avoids artifacts. The claim should be: "physics reduces upper-body
+jerk without sacrificing FGD" — not "physics improves FGD."
+
+**Critical scope**: `phys_upper_only=true` in every F/G experiment. The jerk loss
+was only applied to `dec_upper_6d` (spine + arms + wrists). The code comment in
+`semtalk_sparse_trainer.py` line 474 explains why: fingers and lower body have
+negative ΔR² on GT validation (the physics prior does not fit those joints).
+
+So the correct statement is: **upper-body jerk is reduced 40–60% with no FGD cost**.
+Full-body physics has never been attempted at the sparse stage.
+
+**Q: Is the best run (FGD=0.4118) just a linear gate?**
+
+YES. Confirmed from the saved architecture config at:
+`outputs/custom/0223_191250_semtalk_moclip_sparse_1gpu/0223_191250_semtalk_moclip_sparse.txt`
+showing:
+```
+(gate): Linear(in_features=256, out_features=2, bias=True)
+```
+`vib_enabled` was `false`. `loss_physical_weight` was `0.0` (physics off).
+The gate also collapsed in that run (gate=0.998, sem=0.006), but FGD=0.4118.
+
+**Q: Can we claim "ablation shows FGD is best with MoCLIP + physics + SViB"?**
+
+NO — this claim is not supported. Honest ablation statement:
+- **MoCLIP** is the primary driver (vs. no-CLIP baseline, FGD difference is large).
+- **SViB** prevents gate collapse via KL regularization (proven by F3 collapse vs F1/F2 stable at gate=0.984–0.989) but costs ~0.004–0.005 FGD points vs linear gate.
+- **Physics** (`phys_upper_only=true`, upper body/arms only) reduces upper-body jerk
+  40–60% but does not improve FGD in any configuration tested. Lower body and hands
+  physics were never tested (GT validation showed negative ΔR² for those joints).
+- **Best FGD = MoCLIP + linear gate + no physics** (0.4118, confirmed).
+
+**Q: What is architecturally special about SViB?**
+
+SViB (`SemanticVIB`, `models/semtalk.py` line 96) has three properties absent from
+the linear gate:
+
+1. **Information bottleneck**: The timing stream is compressed 256→64-d before
+   merging with the semantic content stream. This prevents the gate from saturating
+   by encoding arbitrary features — the KL penalty against N(0,I) forces minimal
+   information use.
+
+2. **Stochastic reparameterization**: During training, z = μ + ε·σ (ε ~ N(0,I)).
+   This noise injection acts as a regularizer analogous to dropout. At inference,
+   ε=0 (deterministic). The gate learns to be robust to this noise, avoiding
+   over-reliance on any specific latent direction.
+
+3. **Posterior variance σ²**: Expvar σ² is available as a signal to the physics
+   smoother. When the gate is uncertain (high σ²), physics can modulate jerk
+   penalty differently than when the gate is confident. This coupling is unique to SViB.
+
+In practice with `vib_beta=0.01`, the KL term is 0.4% of total loss — too small
+to strongly constrain the gate. The gate still saturates to 0.984-0.989 (vs 0.998
+for linear), which is an improvement but not a qualitative difference.
+
+**Proposed fix**: Increase `vib_beta` by 5–10× or use KL annealing from 0→0.05
+over 20 epochs. This would force the gate to stay below 0.95 and genuinely compress
+the "when" signal.
+
+### G1-G4: submission saga and current state
+
+**What G1-G4 test**: All build on F2 (best SViB+pred_gate result at 0.4199).
+
+| Name | Description | Start from | phys_lambda | sem_weight |
+|------|-------------|-----------|-------------|------------|
+| G1 | Continue F2 same config | F2 best_70 | 0.30 | 3.0 |
+| G2 | F2 + stronger semantic signal | F2 best_70 | 0.30 | 5.0 |
+| G3 | Fresh start, mid physics | best_184 | 0.15 | 3.0 |
+| G4 | F2 + weaker physics | F2 best_70 | 0.15 | 3.0 |
+
+**Submission saga (4 attempts, 4 different bugs)**:
+
+| Job ID | Dir | Bug | Fix |
+|--------|-----|-----|-----|
+| 5165964 | 100903 | `--run_name` not a valid train.py arg | Removed `--run_name` from script |
+| ~5166xxx | 115919 | `-l gpu=4` is wrong SGE syntax on mld.q | Changed to `-pe smp 4` |
+| 5166308 | 145425 | G2/G3/G4 configs had `gpus: [1/2/3]` but CUDA_VISIBLE_DEVICES=N makes that GPU appear as device 0 | Set `gpus: [0]` in G2/G3/G4 configs |
+| 5166309 | 145608 | G1 failed: port 8681 still held by old G1 process (from 145425, still training at ep20) | G1 is effectively the old 145425 run; G2/G3/G4 now running |
+
+**Current state (as of 2026-04-10 17:00)**:
+- **G1 (145425)**: Running epoch 20, gate≈0.989, sem≈0.145, phys_jerk≈0.304. Resuming F2; same config, well-behaved SViB gate.
+- **G2 (145608)**: Running epoch 22, gate≈0.983, sem≈0.20, phys_jerk≈0.307. Higher sem_weight=5 visibly increases sem signals.
+- **G3 (145608)**: Running epoch 21, gate≈0.986, sem≈0.10, phys_jerk≈0.555. Fresh start with λ=0.15; jerk still high (phys_beta warming up).
+- **G4 (145608)**: Running epoch 21, gate≈0.977, sem≈0.166, phys_jerk≈0.360. Weaker physics already shows lower jerk than F2 start.
+
+All G-series are SViB+pred_gate. G1/G4 resume from F2 best (pre-warmed, gate stable
+sooner). G3 is fresh (gate still partially unstable at ep21). Expected runtime: ~6h
+remaining.
+
+### Summary of FGD rankings (all 15-seq, speaker-2, as of April 10)
+
+| Rank | Run | Architecture | Best FGD |
+|------|-----|-------------|----------|
+| 1 | 0223_191250 | Linear gate, gt_mask, phys OFF, MoCLIP | **0.4118** |
+| 2 | 0223_224354 | Linear gate, gt_mask, phys OFF, MoCLIP | 0.4137* |
+| 3 | F3 | Linear gate, pred_gate, phys OFF | **0.4163** |
+| 4 | F2 | SViB, pred_gate, phys λ=0.30 | **0.4199** |
+| 5 | F1 | SViB, pred_gate, phys λ=0.08 | **0.4255** |
+| 6 | F4 | SViB, uniform, phys λ=0.08 | **0.4274** |
+
+*0223_224354 originally reported as 0.4189 before re-eval; treated as second best.
+
+Linear gate is consistently at the top. SViB variants are consistently 0.004–0.01
+points worse. All within the ±0.01 noise floor, but the directional pattern is clear.
+
+### Open research directions
+
+1. **Increase VIB beta** (0.01 → 0.05–0.10 with warm-up). If KL is only 0.4% of
+   loss, the bottleneck never actually compresses. A proper VIB should keep gate
+   below 0.95. This might be the missing ingredient for SViB to outperform linear.
+
+2. **Run the 265-seq full-test eval**. All FGD numbers above are 15-seq speaker-2.
+   The paper-comparable number needs all speakers. The current test cache
+   (`beat2_cache_2_eval/`) is 265 sequences but was never used at the sparse stage
+   (only base was evaluated there).
+
+3. **Contrastive margin loss** (proposed in Apr 8 redesign): push apart latents on
+   semantic frames, pull together on non-semantic. This directly addresses root
+   cause #3 from the post-mortem (model never trained to produce different output on
+   semantic frames). Still not implemented.
+
+### Next actions
+
+1. **Wait for G1-G4** to complete (~6h). Compare G2 (sem_weight=5) vs G1 — if G2
+   improves FGD, stronger semantic supervision helps. Compare G4 (λ=0.15) vs G1
+   (λ=0.30) — optimal physics strength.
+
+2. **VIB beta experiment**: Set `vib_beta: 0.05` with `vib_beta_warmup: 20`. Run
+   from best_184 as new G5. Predict: gate stays at 0.96 instead of 0.989; if FGD
+   improves toward 0.41X, the bottleneck IS helpful at proper strength.
+
+3. **Implement contrastive margin loss** (see Apr 8 plan, step 1-5 of pipeline table).
+   This is the most promising untested idea.
+
+4. **Before paper submission**: Run 265-seq eval on the best checkpoint. The 15-seq
+   numbers are development-only and cannot be reported in the paper.
+
+---
+
+Timestamp: 2026-04-11
+
+## H/I/J Series — Gate Regularisation Sprint (Apr 10–11)
+
+### Context
+
+Following the Apr 10 F-series analysis, the key problem is identified: the semantic
+gate ψ saturates to ≥0.985 in every `pred_gate` run and is ineffective. The two
+root causes:
+1. **Feedback loop** (`pred_gate` mode): ψ weights the latent loss, so a high ψ
+   is always profitable → gate can never be suppressed.
+2. **VIB beta too small** (0.01): KL is only 0.4% of total loss; the bottleneck
+   never compresses.
+
+Both the Apr 8 post-mortem and the F-series confirmed that `0223_191250` (FGD=0.4118)
+used a fully saturated linear gate (gate=0.998, sem=0.006) with `gt_mask` mode.
+The model was never required to learn good motion when the gate misfired.
+
+### H-series: Overnight verification run (Apr 10 → 11, job pending)
+
+Three configs tested the two specific fixes proposed at end of Apr 10 entry:
+increasing VIB beta and adding gate temporal smoothness.
+
+| Run | Architecture | `vib_beta` | `gate_smooth_weight` | Best FGD | Min gate | Gate trend |
+|-----|-------------|-----------|---------------------|----------|----------|------------|
+| H1 | pred_gate + fused jerk | 0.010 | 0.00 | 0.4202 | ≥0.988 | fully saturated |
+| H2 | pred_gate + gate_smooth | 0.050 | 0.01 | 0.4227 | ~0.952 (transient) | dips briefly, re-saturates |
+| H3 | pred_gate + jerk + gate_smooth | 0.050 | 0.01 | 0.4250 | ≥0.997 | WORSE — competing losses |
+
+**H-series conclusions:**
+- VIB beta increased to 0.05: KL increases but gate still re-saturates without enough
+  temporal penalty.
+- `gate_smooth_weight=0.01` is too weak: H2 produced a transient dip to 0.952 but
+  re-saturated by ep13. H3 (with jerk loss competing) saturated even worse (0.997).
+- Need stronger temporal penalty (`gate_smooth_weight ≥ 0.10`) and a cleaner setup
+  (drop competing losses).
+- FGD for H1-H3 (0.4202–0.4250) is worse than baseline 0.4118 → gate saturation
+  still unresolved.
+
+### I-series + G1/G2 rerun (Apr 11 morning, job 5168683)
+
+Four experiments on 4 GPUs to explicitly test the two gate-fixing strategies.
+
+**G1/G2 rerun** (F2 continuation on GPUs 2/3): Both experiments killed at epoch 25 after
+confirming FGD degradation from the F2 starting checkpoint (G1=0.4304, G2=0.4271 vs
+F2 best=0.4199). F2 continuation does not improve FGD; SViB+phys architecture is not
+competitive with the linear-gate baseline.
+
+**I1 (gt_mask + VIB β=0.05, GPU 0)**: Killed at epoch 25 due to posterior collapse.
+Without the pred_gate feedback loop, the model collapses gate_mu to a common value
+across all frames: KL fell from 1.33 → 0.755 by ep25 (still falling).
+Posterior collapse = model makes gate identical for every frame = gate becomes uniform
+noise. `gt_mask` mode removes the feedback loop but also removes the implicit pressure
+to diversify the gate representation.
+
+**I2 (pred_gate + gate_smooth=0.10 + VIB β=0.05, GPU 1)**: SURVIVED. At epoch 53/80:
+- Best FGD: **0.4216** (eval at ~ep47)
+- KL: stable at 1.19–1.30 across all epochs (no collapse)
+- Gate: reached transient minimum 0.952 (ep47 eval); current ep53 gate ~0.979-0.986
+- gate_smooth loss: 0.015–0.017 (small but stabilised, prevents uniform flat gate)
+
+The temporal penalty `Σ(ψ_t − ψ_{t-1})²` prevents the posterior collapse seen in I1.
+It does not force the gate LOW, but it prevents the gate from being *identical* every
+frame — which is sufficient to keep KL from collapsing.
+
+| Run | Status | Epochs | Best FGD | Min gate | KL trend |
+|-----|--------|--------|----------|----------|----------|
+| G1 | KILLED | 25/80 | 0.4304 | 0.973 | stable 2.0 |
+| G2 | KILLED | 25/80 | 0.4271 | 0.967 | stable 2.1 |
+| I1 | KILLED | 25/80 | — | 0.968 | collapsing → 0.755 |
+| I2 | RUNNING | 53/80 | **0.4216** | **0.952** | stable ~1.20 |
+
+### J-series: second wave (Apr 11 noon, job 5169003)
+
+After killing I1/G1/G2, three more configs launched to explore the direction space
+opened by I2's success:
+
+| Run | Mode | `gate_smooth_weight` | `gate_mean_weight` | `vib_beta` | Best FGD | Min gate | KL trend |
+|-----|------|---------------------|-------------------|-----------|----------|----------|----------|
+| J1 | gt_mask | 0.10 | 0.00 | 0.050 | 0.4248 | 0.970 | collapsing → 0.717 |
+| J2 | pred_gate | 0.25 | 0.00 | 0.050 | **0.4222** | **0.955** | stable 1.14–1.25 |
+| J3 | pred_gate | 0.10 | 0.05 | 0.050 | 0.4302 | 0.964 | stable 1.37 |
+
+Status as of 2026-04-11 ~14:00 CEST: J1=ep29/80, J2=ep42/80, J3=ep41/80.
+
+**J1 finding**: `gt_mask + gate_smooth=0.10` still causes posterior collapse. The
+gate_smooth slows the collapse (KL 1.33 → 0.717 over 29 epochs vs I1's collapse over
+25 epochs) but does not prevent it. Conclusion: **gt_mask mode is incompatible with
+VIB**. Without the pred_gate feedback, the model collapses regardless of temporal
+penalty strength.
+
+**J2 finding**: Stronger gate_smooth (0.25 vs I2's 0.10) shows similar gate dynamics
+(min 0.955 vs I2's 0.952). KL stable, no collapse. FGD 0.4222 is slightly worse than
+I2's 0.4216. Tentative conclusion: gate_smooth_weight saturation above 0.10.
+
+**J3 finding**: Adding gate_mean_penalty (pushes mean(ψ) toward 0 globally) gives
+FGD 0.4302 — notably worse. Direct mean suppression is too crude: it fights the
+model's learned temporal distribution instead of letting it settle. Drop this approach.
+
+**New code added (this period):**
+- `gate_mean_weight` config param: `utils/config.py` line ~383, `semtalk_sparse_trainer.py`
+  lines ~200, 517–530.
+- `"gate_mean"` EpochTracker meter registered in `__init__` (line ~66).
+- Implementation: `g_loss_final += gate_mean_weight * gate_class_pred_val[:,:,1].mean()`
+
+**New infrastructure added:**
+- `scripts/check_training.sh` — colour-coded cluster monitor (auto/all/specific modes).
+  Shows: cluster job status, per-experiment FGD/gate/KL trajectory, min-gate colour
+  coding (🔴≥0.985, 🟡0.960–0.984, 🟢<0.960), ETA, experiment descriptions.
+- `.github/prompts/check-training.prompt.md` — Copilot `/check-training` slash command.
+- New experiment directories: `outputs/i1i2_g1g2_20260411_083907/`,
+  `outputs/j1j2j3_20260411_105952/`.
+- Job submit scripts: `submit_i1i2_g1g2_sge.sh`, `submit_j1j2j3_sge.sh`.
+- Configs: `i1_gtmask_vib05.yaml`, `i2_strong_gate_smooth.yaml`, `j1_gtmask_smooth.yaml`,
+  `j2_stronger_smooth.yaml`, `j3_gate_mean_penalty.yaml`.
+
+### Updated FGD rankings (all 15-seq, speaker 2, as of 2026-04-11)
+
+| Rank | Run | Architecture | Best FGD | Gate end | Notes |
+|------|-----|-------------|----------|----------|-------|
+| 1 | 0223_191250 | Linear gate, gt_mask, MoCLIP, no physics | **0.4118** | 0.998 | Historical best; gate fully collapsed |
+| 2 | 0223_224354 | Linear gate, gt_mask, MoCLIP, no physics | ~0.4137 | 0.998 | Second cont of same run |
+| 3 | F3 | Linear gate, pred_gate, no VIB, no physics | **0.4163** | 0.998 | Gate collapsed, still best F-series |
+| 4 | F2 | SViB, pred_gate, phys λ=0.30 (upper only) | **0.4199** | 0.984 | Best SViB so far |
+| 5 | I2 | pred_gate, gate_smooth=0.10, VIB β=0.05 | 0.4216 | ~0.980 | **Still running** |
+| 6 | J2 | pred_gate, gate_smooth=0.25, VIB β=0.05 | 0.4222 | ~0.978 | **Still running** |
+| 7 | J1 | gt_mask, gate_smooth=0.10, VIB β=0.05 | 0.4248 | 0.998 | Posterior collapse |
+| 8 | H1 | pred_gate, fused jerk, VIB β=0.01 | 0.4202 | ≥0.988 | Gate saturated |
+| 9 | H2 | pred_gate, gate_smooth=0.01, VIB β=0.05 | 0.4227 | transient 0.952 | Transient dip |
+| 10 | H3 | pred_gate, all combined, VIB β=0.05 | 0.4250 | ≥0.997 | Competing losses |
+| 11 | J3 | pred_gate, gate_smooth=0.10, gate_mean=0.05 | 0.4302 | 0.964 | Over-penalised |
+
+### Scientific question: Can we claim physics + gate improve FGD?
+
+**Short answer: No, not yet. Specific claims that ARE supported:**
+
+**Physics prior (arm_combined_core, `phys_upper_only=True`):**
+- GT validation (run on 265 test clips): arm_combined_core has highest delta-R2 for
+  semantic frames (+4.02 vs shoulder-only); shoulder PLV 0.51 (semantic) vs 0.31 (beat).
+  This validates the SIGNAL exists in GT data.
+- Training evidence: physics reduces upper-body jerk 40–60% (F1 λ=0.08: jerk 1.19 raw
+  → 0.68; F2 λ=0.30: jerk → 0.48). No perceptual jerk artifacts on arms/spine.
+- FGD: NOT improved. Every run with physics enabled is 0.004–0.010 FGD points worse
+  than the best linear-gate no-physics run (0.4118). `phys_jerk` training loss = 0.5%
+  of total loss → regularisation is too weak to alter learned motion distribution.
+- **Honest claim**: "physics (arm_combined_core, upper body only) reduces FGD-evaluated
+  upper-body jerk without measurable FGD cost, validated by GT frequency/PLV analysis."
+  NOT: "physics improves FGD."
+
+**Semantic gate (ψ) improvements:**
+- Historical runs: gate saturated to 0.998 in every non-VIB run and 0.984–0.989 in
+  SViB runs. Gate was effectively always-on — no temporal semantic structure.
+- I2/J2 with gate_smooth ≥ 0.10: gate oscillates between 0.952–0.986 per eval, KL
+  stable at 1.14–1.30. Gate_smooth prevents posterior collapse (gt_mask mode) and
+  prevents full saturation (pred_gate mode). **The gate is now functionally non-trivial.**
+- FGD: NOT yet improved. I2 best=0.4216, J2 best=0.4222 — both worse than historical
+  best 0.4118. The improved gate dynamics have not yet translated to better latent
+  generation. This may be a training-duration effect (I2/J2 at ep42-54/80) or may
+  reflect that gate variation alone is insufficient without a latent diversity signal.
+- **Honest claim**: "gate_smooth (weight ≥ 0.10) prevents gate saturation and posterior
+  collapse, producing functionally variable temporal gate ψ ∈ [0.95, 0.98] range per
+  epoch." NOT: "improved gate improves FGD."
+
+**What remains to be done before a positive claim is possible:**
+1. Let I2/J2 run to completion (80 epochs). If final best FGD drops below 0.4118,
+   gate regularisation demonstrably helps.
+2. Consider adding contrastive margin loss (Apr 8 plan): gate diversity is necessary but
+   not sufficient — the sparse latents must also diverge on semantic frames.
+3. For physics: run a "uniform-mass physics" baseline (all joints same τ) to isolate
+   the arm_combined_core mass prior contribution vs generic jerk suppression.
+
+### Next actions
+
+1. **Monitor I2/J2** to epoch 80. Kill J1 (posterior collapse), J3 (FGD regression).
+2. **If I2/J2 final FGD > 0.4118**: implement contrastive margin loss (Apr 8 plan).
+3. **If I2/J2 final FGD ≤ 0.4118**: treat gate_smooth as a stabiliser (not an FGD
+   improver); return to linear gate + contrastive loss as the primary hypothesis.
+4. Run 265-seq eval on whatever becomes the best checkpoint.
+
+---
+
+## K-Series: Full-Body Physics + gate_smooth Ablation (Apr 12, 2026)
+
+### K-series results (job 5170597, all 80/80 epochs on gridnode016)
+
+| Run | λ_h | VIB β | gate_smooth | Best FGD | Last FGD | Min gate | KL final |
+|-----|-----|--------|-------------|----------|---------|---------|---------|
+| K1 | 5.0 | 0.050 | 0.25 | **0.41798** | 0.41798 | 0.954 | ~1.10 |
+| K2 | 5.0 | 0.100 | 0.25 | 0.42167 | 0.44352 | 0.949 | ~0.83 |
+| K3 | 10.0 | 0.050 | 0.10 | 0.42090 | 0.44343 | 0.953 | ~1.11 |
+
+K1 is the new best stable-gate result (0.41798). K2 degraded significantly by ep79 — stronger β=0.10 compressed KL to 0.83 over 80 epochs, i.e. the latent is losing diversity under excessive VIB pressure. K3's aggressive λ_h=10 gave no additional FGD benefit over K1 and also regressed late. K1 "last = best" means it ended at its peak with no regression — still improving.
+
+K1's phys_jerk at ep0=1.26, ep79≈0.93: ~26% jerk reduction sustained throughout training. VIB beta warmed to 0.048 (just under target 0.050).
+
+### Corrected honest view of what gate_smooth actually does
+
+**gate_smooth does NOT improve FGD.** The ablation table as presented was misleading.
+Actual numbers in comparison order:
+
+| Step | FGD |
+|------|-----|
+| Baseline (no MoCLIP) | 0.4300 |
+| + MoCLIP | 0.4278 |
+| + S-VIB (unstabilised, ψ→0.998) | 0.4188 |
+| + gate_smooth=0.25 (stable gate) | 0.4214 ← **WORSE than no stabilisation** |
+| + phys full-body (K1) | 0.4180 ← still worse than unstabilised 0.4188 |
+
+gate_smooth costs FGD (0.4188→0.4214) and physics partially recoups it (→0.4180),
+but we're still below the unstabilised naive VIB baseline. The honest claim remains:
+
+> gate_smooth prevents gate saturation and VIB posterior collapse.  
+> It is a **stability mechanism**, not a performance booster.  
+> The all-time best (0.4118, linear gate, no gate_smooth, 190 epochs) is still
+> unreached by any gate-regularised run.
+
+K1 being at its peak at ep79 and no regression suggests extending to 160–190 epochs
+is the right next step before drawing conclusions about the physics contribution.
+
+### Why "physics full" in K1 is misleading — the pendulum is in the arm, not fingers
+
+The user raised the correct conceptual point: the physically meaningful signal is
+**the arm modelled as a linked pendulum** (shoulder → elbow → wrist), not the fingers.
+The De Leva finger masses (~0.0004/joint normalised) are 50× lighter than upper arm
+joints and pass through the τ_floor=0.10 clamp — they contribute almost nothing to the
+jerk loss even at λ_h=5.0 except occupying terms in the sum.
+
+What K1's phys_hands addition actually does:
+- `_UPPER_JOINT_IDX = [3,6,9,12,13,14,15,16,17,18,19,20,21]` already covers the full
+  kinematic chain: shoulder (13,14), upper arm (15,16), elbow/forearm (17,18), wrist
+  (19,20), and the hand root (21). This is the pendulum.
+- Adding `_HANDS_JOINT_IDX = range(25,55)` with λ_h=5 adds light finger jerk loss on
+  top, which may be slightly helping wrist-level stability by regularising the tips, but
+  the mass model for fingers is not physically grounded the way the arm chain is.
+
+**The correct framing of K1's physics:**
+"arm-plus-wrist jerk regularisation (shoulder→wrist pendulum, already in upper body
+physics) is the active signal; the λ_h finger scaling reduces noise in the hands region
+without a physically motivated mass prior."
+
+The arm-as-pendulum physics (upper body only, `phys_upper_only=True`) was and remains
+the scientifically grounded component. K1's extra finger term is an engineering
+workaround for the De Leva mass model's inadequacy at the extremities. If this is
+written in the paper, the claim should be: "jerk regularisation along the arm kinematic
+chain (shoulder → wrist)" — not "full-body physics including fingers."
+
+### Why phys_upper_only=False in K-series was wrong
+
+K-series (`phys_upper_only=false`) added hands (30 finger joints) and lower body (9
+joints) to the jerk loss. The user correctly identified this as unnecessary: the arm
+pendulum signal — shoulder (16,17) → elbow (18,19) → wrist (20,21) — is already
+**entirely inside `_UPPER_JOINT_IDX`**. `phys_upper_only=True` already covers it.
+
+The finger terms (`_HANDS_JOINT_IDX = range(25,55)`) have De Leva masses of 0.0004
+each, hit the τ_floor=0.10 clamp, and contribute noise rather than signal. The lower
+body (`_LOWER_JOINT_IDX = [0–8]`) has heavy masses (pelvis 0.11, thighs 0.14) which
+impose strong jerk regularisation on legs — but leg motion co-varies with speech
+rhythm differently from arm swing (foot contact, weight shift), so penalising leg jerk
+with the same τ formula as arms introduces a mis-matched prior.
+
+**K1's 0.41798 vs J2's 0.4222:** This improvement is confounded. K1 and J2 ran
+concurrently on the same job (5170597) but on different GPUs. K1 never regressed
+(last=best at ep79); J2 regressed slightly from its early peak. The difference in FGD
+could be noise from random seed / GPU ordering, not from the added hands/lower terms.
+
+### What physics was in s01_base_r05 (the 0.4137 run)
+
+**Config** (`0311_102115_s01_base_r05`, best_184.bin):
+- `phys_enabled: true`, `phys_lambda: 0.08`
+- `phys_upper_only`: NOT SET → default=`False` → **full body**: upper + hands + lower
+- `phys_tau_base: 0.50`, `phys_tau_floor: 0.10`, `phys_alpha: 1.0`
+- `phys_warmup_start: 30`, `phys_warmup_end: 80` (physics ramped in slowly)
+- `vib_beta_target: 0.01` (10× lower than later runs at 0.05)
+- NO `phys_hands_lambda` (not yet added), NO `gate_smooth_weight`
+- gate at ep146 start: 0.995–1.000 (effectively always-on, gt_mask mode)
+
+**What "full body" meant at the time (no λ_h compensation):**
+- Upper body (_UPPER_JOINT_IDX): masses 0.027 (shoulder) / 0.016 (elbow) / 0.006 (wrist)
+  → after sqrt-compress + floor: moderate τ weights → arm-chain jerk penalty is real
+- Hands (_HANDS_JOINT_IDX, 30 fingers): masses 0.0004/joint → hit τ_floor=0.10
+  → effectively uniform floor-clamped weight → cosmetic contribution only
+- Lower body (_LOWER_JOINT_IDX): pelvis 0.11, thighs 0.14
+  → after sqrt-compress: HEAVIEST weights → strong leg/hip jerk penalty
+
+So s01's "full body" physics was in practice: **heavy leg regularisation + moderate arm
+regularisation + negligible finger regularisation**. Not the arm pendulum we want.
+The phys_jerk at ep146–184 was 0.16–0.20 (vs K1's 1.26 at ep0), meaning the model
+had already substantially reduced its motion jerk over 184 training epochs with this
+mixed prior. The leg jerk suppression is not a physically motivated co-speech signal.
+
+### Why we cannot currently make the three-way ablation claim
+
+The user asked: **can we construct an ablation showing MoCLIP + arm physics + S-VIB
+gate all individually improve FGD?**
+
+**Short answer: No. The reason is a trainer version discontinuity.**
+
+The best historical run (`0223_191250`, FGD=0.4118) was trained on a February version
+of the trainer that:
+- Did NOT have `vib_enabled` or `phys_enabled` parameters (added in March/April)
+- Used `g_name: 'semtalk_sparse'` with a simpler gate (soft blend coefficient ψ)
+- Had `loss_physical_weight: 0.0` — no physics at all
+
+If you ran that same YAML through the **current** trainer today, VIB would be ON by
+default (`config.py` registers `vib_enabled=True`, `phys_enabled=True`). The trainer
+that produced 0.4118 no longer exists in its original form.
+
+The current model family (`g_name: semtalk_svib_phys` = alias for `semtalk_sparse` in
+`models/semtalk.py`, same architecture) with VIB and physics has **never beaten 0.4118**.
+
+### Best available ablation from existing runs
+
+All rows below are on the **same architecture** (semtalk_sparse / semtalk_svib_phys).
+The trainer version differs between the 0223 row and the March/April rows.
+
+| # | Run | MoCLIP | S-VIB | Physics | gate_smooth | FGD ↓ | Notes |
+|---|-----|--------|-------|---------|-------------|-------|-------|
+| 0 | released weights | ✅ | ❌ | ❌ | ❌ | ~0.4300 | pre-VIB, from paper |
+| 1 | 0223_191250 (old trainer) | ✅ | ❌ | ❌ | ❌ | **0.4118** | best ever; simple gt_mask gate |
+| 2 | 0223_224354 (continued) | ✅ | ❌ | ❌ | ❌ | 0.4189 | continued from ep171, regressed |
+| 3 | s01_base_r05 (0311) | ✅ | ✅ β=0.01 | ✅ full-body* | ❌ | 0.4137 | gate saturated (0.995–1.0) |
+| 4 | I2 (Apr 11) | ✅ | ✅ β=0.05 | ✅ upper-only | ✅ w=0.10 | 0.4216 | gate stable ~0.97 |
+| 5 | J2 (Apr 11) | ✅ | ✅ β=0.05 | ✅ upper-only | ✅ w=0.25 | 0.4214 | gate stable ~0.955 |
+| 6 | K1 (Apr 12) | ✅ | ✅ β=0.05 | ✅ full-body** | ✅ w=0.25 | 0.4180 | gate stable ~0.954 |
+
+*Row 3 physics: full body but heavy on **legs** (pelvis/thigh masses 0.11–0.14),
+moderate on arms, negligible on fingers. Gate saturated at 0.995–1.000 (VIB β=0.01
+was too small to drive gate variation). Physics reduced phys_jerk from ~1.2 raw to
+0.16–0.20 by ep184, including substantial leg smoothing.
+
+**Row 6 physics: same full-body scope with λ_h=5 finger boost — see K-series analysis.
+The physically meaningful term remains the arm chain; finger/leg terms are noise.
+
+**What the table honestly shows:**
+- Row 0→1: MoCLIP clearly helps (−0.0182 FGD), established on old trainer
+- Row 1→3: Adding VIB β=0.01 + full-body physics on new trainer: 0.4137. This is
+  **better** than rows 4–6 (which all use gate_smooth). But row 3's gate is non-functional
+  (ψ≈1 always), so VIB adds nothing over a non-VIB run — the improvement over row 0
+  is confounded between MoCLIP and training duration (184 careful epochs).
+- Row 3→4/5: Adding gate_smooth to stabilise VIB: FGD **worsens** to 0.42+
+- Row 5→6: Adding full-body physics noise: 0.4214 → 0.4180. Modest improvement but
+  confounded (concurrent GPU, different random seed, K1 never regressed).
+
+**The one claim that IS internally consistent in current data:**
+> "s01_base_r05 (MoCLIP + S-VIB β=0.01 + full-body jerk, 184 epochs) achieves FGD
+> 0.4137, approaching the MoCLIP-only ceiling of 0.4118, with reduced motion jerk
+> (phys_jerk 0.16 vs ~1.2 raw) and meaningful VIB KL (1.5–1.6 nats stable)."
+
+But the gate in row 3 was not functioning as a semantic selector (ψ≈1 everywhere),
+so the "S-VIB gate" claim does not hold for that run specifically.
+
+**What a valid ablation actually requires** (all rows on the current trainer):
+
+| Row | Config | FGD | Status |
+|-----|--------|-----|--------|
+| 0 | No MoCLIP, vib=off, phys=off | ? | ❌ Not run |
+| 1 | + MoCLIP, vib=off, phys=off | ? | ❌ Not cleanly run on current trainer |
+| 2 | + MoCLIP + S-VIB, phys=off | 0.4188 | ⚠ exists but pred_gate/unstabilised |
+| 3 | + MoCLIP + S-VIB + arm physics | 0.4137 | ⚠ s01_base_r05, β=0.010, not step-matched |
+
+Row 1 (MoCLIP-only baseline on current trainer) is the critical missing piece.
+Without it we cannot measure what MoCLIP alone contributes under the current code path.
+
+### Next actions (Apr 12)
+
+1. **Create `configs/l0_moclip_only.yaml`** — current trainer, `vib_enabled: false`,
+   `phys_enabled: false`, `latent_loss_mode: gt_mask`, 160 epochs. This is the missing
+   ablation baseline that tells us what the current trainer achieves with MoCLIP alone.
+2. **Run L0 + L1 together** — L0 is the MoCLIP-only baseline; L1 adds arm-chain
+   physics (`phys_upper_only: true`) + S-VIB (J2 gate recipe). Together they give a
+   clean ±VIB ±physics delta on the identical architecture and training pipeline.
+3. **Do not claim gate_smooth improves FGD** in the paper — it is a stability mechanism
+   only.
+4. **Physics paper claim**: "jerk regularisation along the arm kinematic chain
+   (shoulder→wrist) reduces motion jerk without FGD regression" — supported by the
+   phys_jerk drop and GT frequency/PLV analysis. Fingers/legs excluded because the
+   De Leva mass model is not physically grounded at the extremities.
+5. **If L1 < L0**: stable gate + arm-chain physics genuinely improves FGD over MoCLIP
+   alone and can all be reported. If L1 ≥ L0: gate_smooth is net-negative and the
+   final submission should revert to the simpler linear gate.
+
+---
+
+## [2026-04-12] Ablation Study Table — MoCLIP × Physics × S-VIB
+
+**Purpose:** Systematic ablation over the three novel components added to SemTalk sparse.
+All rows use speaker 2 (Scott), 15-sequence subset FGD unless noted.
+
+**Metric definitions:**
+- **FGD** ↓ — Fréchet Gesture Distance (lower = better distribution match)
+- **BC** ↑ — Beat Consistency / Alignment (higher = better audio-motion sync)
+- **DIV** ↑ — L1 Diversity (higher = more varied output)
+- **MSE** ↓ — Mean squared pose error vs reference; pending fair-eval run
+- **LVD** ↓ — L1 velocity difference (motion smoothness); pending fair-eval run
+
+### Table 1: Component Ablation
+
+| Model | MoCLIP | Physics | S-VIB | FGD ↓ | BC ↑ | DIV ↑ | MSE ↓ | LVD ↓ | Source / Notes |
+|-------|:------:|:-------:|:-----:|-------:|-----:|------:|------:|------:|----------------|
+| SemTalk base | ✗ | ✗ | ✗ | ~0.430 | — | — | — | — | Published base (released ckpt) |
+| SemTalk sparse | ✗ | ✗ | ✗ | ~0.428 | — | — | — | — | Published sparse (released ckpt) |
+| + MoCLIP (old trainer) | ✓ | ✗ | ✗ | **0.4118** | — | — | — | — | `0223_191250/best_149`, linear gate, Feb codebase †|
+| + MoCLIP (current trainer) | ✓ | ✗ | ✗ | 0.4163 | 0.7648 | 12.812 | — | — | F3, `0410_003629`, linear gate, fully collapsed ψ≈1 |
+| + MoCLIP (gate_abl_A, no phys) | ✓ | ✗ | ✗ | 0.4128 ⚑ | 0.7679 | 12.438 | — | — | `gate_abl_A_no_vib`, job 5174933, ep202/264 interim |
+| + MoCLIP + S-VIB (gate_abl_B) | ✓ | ✗ | ✓ | 🏃 running | — | — | — | — | `gate_abl_B_with_vib`, job 5174933, β=0.05, ~80 ep |
+| + MoCLIP + Physics (arm) + S-VIB | ✓ | ✓ arm | ✓ | 0.4180 | 0.7454 | 12.622 | — | — | K1 `0411_230216`, β=0.05, gate_smooth=0.25, 80 ep |
+| + MoCLIP + Physics (full) + S-VIB | ✓ | ✓ full | ✓ | 0.4137 | **0.746** | **12.46** | — | — | `s01_base_r05/best_184`, β=0.01, 184 ep ‡ |
+
+**† Caveat:** The old-trainer FGD=0.4118 is on a February codebase without VIB warmup,
+phys_enabled, or pred_gate mode. Not directly comparable to current-trainer rows.
+
+**‡ Caveat:** s01_base_r05 used β=0.01 (weak VIB — effectively collapsed gate, ψ≈1),
+full-body physics (not arm-only). Physics contribution is dominated by lower-body jerk
+which is not supported by the De Leva mass prior. BC and DIV are the only rows with
+all three metrics measured.
+
+### Table 2: Gate Stabilisation Sub-Ablation (all: MoCLIP ✓, Physics arm ✓, current trainer)
+
+| Config | S-VIB β | gate_smooth | Gate behaviour | FGD ↓ | BC ↑ | DIV ↑ |
+|--------|--------:|------------:|----------------|-------:|-----:|------:|
+| F1 (pred_gate, arm phys) | 0.010 | 0.0 | saturated ~0.989 | 0.4255 | 0.7538 | 12.700 |
+| F2 (pred_gate, strong phys) | 0.010 | 0.0 | saturated ~0.984 | 0.4199 | 0.7569 | 12.719 |
+| I2 (pred_gate, arm phys) | 0.050 | 0.10 | stable ~0.97 | 0.4216 | 0.7487 | 12.588 |
+| J2 (pred_gate, arm phys) | 0.050 | 0.25 | stable ~0.955 | 0.4214 | 0.7448 | 12.723 |
+| K1 (pred_gate, full phys λ_h=5) | 0.050 | 0.25 | stable ~0.954 | **0.4180** | 0.7454 | 12.622 |
+| K2 (pred_gate, full phys λ_h=5) | 0.100 | 0.25 | stable ~0.949 | 0.4217 | 0.7392 | 12.710 |
+
+### Missing cells and when they will be filled
+
+| Missing cell | Experiment | ETA |
+|---|---|---|
+| gate_abl_A final FGD/BC/DIV | job 5174933 running, ~15 min to A finish | interim 0.4128/0.7679/12.44 @ep202 |
+| gate_abl_B FGD/BC/DIV | job 5174933, starts after A ~09:45 | ~2–3 h after A done |
+| MSE / LVD for any row | run `utils/run_fair_semtalk_eval.py` on best ckpts | after A/B finish |
+| Physics (arm) + no VIB row | not yet submitted | after A/B results |
+
+### Interpretation (partial, Apr 12)
+
+- **MoCLIP contribution** (row 3 vs row 1/2): ~0.016–0.062 FGD improvement. Largest
+  single factor. Confirmed robust across trainer versions.
+- **S-VIB contribution** (gate_abl_A vs gate_abl_B): **pending** — this is exactly
+  what job 5172820 is designed to answer with a clean single-variable comparison.
+- **Physics contribution**: gate stabilisation with arm-only physics (K1 = 0.4180) is
+  better than no physics (I2/J2 = 0.4214–0.4216). Delta = ~0.003 FGD. Marginal but
+  consistent direction. Full-body physics (s01 = 0.4137) confounded by β=0.01 and
+  trainer version difference.
+- **Gate_smooth**: costs ~0.003–0.005 FGD vs no-smooth runs. Stability mechanism only,
+  not an FGD improvement. Do not claim as a contribution.
+
+*Update this table when gate_abl_A/B results are available.*

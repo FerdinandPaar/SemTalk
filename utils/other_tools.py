@@ -971,15 +971,21 @@ def load_checkpoints(model, save_path, load_name='model'):
         return OrderedDict(sd)
 
     def _is_allowed_non_strict(missing, unexpected):
+        # Keys allowed to be missing (initialized randomly) or unexpected (ignored).
+        # Covers: mass-conditioning additions and gate architecture changes
+        # (switching vib_enabled changes gate from nn.Linear to SemanticVIB).
         allowed_prefixes = (
             'base_mass_cond_',
             'module.base_mass_cond_',
             'mass_cond_',
             'module.mass_cond_',
+            'gate.',
+            'module.gate.',
         )
-        if unexpected:
-            return False
         for key in missing:
+            if not key.startswith(allowed_prefixes):
+                return False
+        for key in unexpected:
             if not key.startswith(allowed_prefixes):
                 return False
         return True
@@ -999,7 +1005,7 @@ def load_checkpoints(model, save_path, load_name='model'):
                 f"Non-strict load rejected for {load_name}. "
                 f"Missing keys: {missing[:10]} Unexpected keys: {unexpected[:10]}"
             ) from e
-        print("Applied guarded non-strict load for new base mass-conditioning keys.")
+        print(f"Applied guarded non-strict load. Missing={missing[:5]} Unexpected={unexpected[:5]}")
 
     print(f"Successfully loaded self-pretrained checkpoints for {load_name}")
 
@@ -1022,10 +1028,13 @@ def load_checkpoints2(model, save_path, load_name='model'):
             'module.base_mass_cond_',
             'mass_cond_',
             'module.mass_cond_',
+            'gate.',
+            'module.gate.',
         )
-        if unexpected:
-            return False
         for key in missing:
+            if not key.startswith(allowed_prefixes):
+                return False
+        for key in unexpected:
             if not key.startswith(allowed_prefixes):
                 return False
         return True
@@ -1045,7 +1054,7 @@ def load_checkpoints2(model, save_path, load_name='model'):
                 f"Non-strict load rejected for {load_name}. "
                 f"Missing keys: {missing[:10]} Unexpected keys: {unexpected[:10]}"
             ) from e
-        print("Applied guarded non-strict load for new base mass-conditioning keys.")
+        print(f"Applied guarded non-strict load. Missing={missing[:5]} Unexpected={unexpected[:5]}")
 
     print(f"Successfully loaded self-pretrained checkpoints for {load_name}")
 
